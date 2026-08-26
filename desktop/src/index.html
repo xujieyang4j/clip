@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <!-- CSP: no remote content; file: allows loading local media via file:// URLs -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data: file:; media-src 'self' file:; style-src 'self' 'unsafe-inline';" />
+  <title>MiniClip</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">MiniClip</div>
+    <label class="language-control" title="界面语言">
+      <span>语言</span>
+      <select id="languageSelect" aria-label="界面语言">
+        <option value="zh-CN">中文</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+    <div class="spacer"></div>
+    <button id="btnOpenProject" class="btn">打开工程</button>
+    <button id="btnSaveProject" class="btn" disabled>保存工程</button>
+    <button id="btnPackageProject" class="btn" disabled>打包工程</button>
+    <button id="btnRelinkMedia" class="btn hidden">重新链接素材</button>
+    <button id="btnUndo" class="btn" disabled title="撤销 (Ctrl/⌘+Z)">↶ 撤销</button>
+    <button id="btnRedo" class="btn" disabled title="重做 (Ctrl/⌘+Shift+Z)">↷ 重做</button>
+    <button id="btnImport" class="btn btn-primary">＋ 导入媒体</button>
+    <button id="btnInsertClip" class="btn" disabled title="在播放头插入视频">插入</button>
+    <button id="btnOverwriteClip" class="btn" disabled title="用视频覆盖选中片段">覆盖</button>
+    <button id="btnRippleDelete" class="btn" disabled title="波纹删除选中主视频片段">波纹删除</button>
+    <button id="btnExtractAudio" class="btn" disabled title="将选中片段原声分离到音频轨">分离音频</button>
+    <select id="exportPreset" class="top-select" title="导出预设">
+      <option value="draft">草稿质量</option>
+      <option value="standard" selected>标准质量</option>
+      <option value="high">高质量</option>
+    </select>
+    <button id="btnExport" class="btn" disabled>⤴ 导出</button>
+  </header>
+
+  <main class="workspace">
+    <!-- Left: preview + status -->
+    <section class="stage">
+      <div class="preview" id="previewBox">
+        <div class="canvas" id="previewCanvas">
+          <video id="player" playsinline></video>
+          <!-- B-roll stays above the main video and below regular overlays. -->
+          <div id="brollLayer" class="overlay-layer"></div>
+          <!-- HTML text overlays approximate burned subtitles during preview -->
+          <div id="textLayer" class="text-layer"></div>
+          <!-- HTML media overlays approximate PiP/stickers during preview -->
+          <div id="overlayLayer" class="overlay-layer"></div>
+          <!-- Hit targets and transform handles for directly manipulating layers. -->
+          <div id="transformLayer" class="transform-layer"></div>
+        </div>
+        <div id="previewEmpty" class="preview-empty">导入视频或图片后在此预览</div>
+        <div class="preview-controls">
+          <button id="btnPlay" class="btn" disabled>▶ 播放</button>
+          <button id="btnRenderPreview" class="btn" disabled title="渲染含全部效果的预览">▣ 成片预览</button>
+          <span id="timeLabel" class="time">0.0 / 0.0s</span>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <span id="status" class="status">导入一段视频开始</span>
+        <div id="progressWrap" class="progress-wrap hidden">
+          <progress id="progress" max="1" value="0"></progress>
+          <button id="btnCancel" class="btn btn-small">取消</button>
+        </div>
+        <div class="spacer"></div>
+        <button id="btnReveal" class="btn btn-small hidden">在文件夹中显示</button>
+      </div>
+    </section>
+
+    <!-- Right: inspector with tabs -->
+    <aside class="inspector">
+      <nav class="tabs">
+        <button class="tab active" data-tab="clip">片段</button>
+        <button class="tab" data-tab="broll">视频层</button>
+        <button class="tab" data-tab="canvas">画布</button>
+        <button class="tab" data-tab="text">文字</button>
+        <button class="tab" data-tab="overlay">叠加</button>
+        <button class="tab" data-tab="audio">音频</button>
+      </nav>
+
+      <!-- ===== 片段 (per-clip inspector) ===== -->
+      <div class="tabpane" data-pane="clip">
+        <div id="clipEmpty" class="pane-empty">在下方时间线点选一个片段进行编辑</div>
+        <div id="clipInspector" class="hidden">
+          <h3 id="clipTitle">片段</h3>
+
+          <div class="field">
+            <div class="row">
+              <button id="btnSplitClip" class="btn btn-small">✂ 在当前播放位置分割</button>
+              <button id="btnDuplicateClip" class="btn btn-small">⧉ 复制并插入</button>
+              <label>定格 <input id="freezeFrameDuration" type="number" min="0.1" max="30" step="0.1" value="2" class="num" />s</label>
+              <button id="btnFreezeFrame" class="btn btn-small">▣ 插入定格帧</button>
+              <button id="btnToggleClipMute" class="btn btn-small">🔊 静音片段</button>
+              <button id="btnCopyClipAppearance" class="btn btn-small">◫ 复制画面属性</button>
+              <button id="btnPasteClipAppearance" class="btn btn-small" disabled>▣ 粘贴画面属性</button>
+            </div>
+            <p class="muted small">分割快捷键 Ctrl/⌘+B；属性复制/粘贴快捷键 Ctrl/⌘+Shift+C / Ctrl/⌘+Shift+V。播放头需位于所选片段的保留范围内。</p>
+          </div>
+          <div class="field row">
+            <button id="btnRemoveSilence" class="btn btn-small">✂ 删除当前片段静音</button>
+            <button id="btnDetectBeats" class="btn btn-small">♩ 检测节拍</button>
+            <button id="btnDetectScenes" class="btn btn-small">▦ 镜头分割</button>
+            <button id="btnStepBack" class="btn btn-small">◀ 帧</button>
+            <button id="btnStepForward" class="btn btn-small">帧 ▶</button>
+          </div>
+          <p class="muted small">静音删除会按检测区间拆分当前片段并自动波纹前移后续字幕、图层和音频。镜头分割会按明显画面切换拆开片段，不改变成片总时长。节拍仅用于时间线磁吸辅助。</p>
+
+          <fieldset class="field">
+            <legend>裁剪</legend>
+            <label>起点 <b id="trimStartVal">0.0s</b></label>
+            <input id="trimStart" type="range" min="0" max="1" step="0.05" value="0" />
+            <label>止点 <b id="trimEndVal">0.0s</b></label>
+            <input id="trimEnd" type="range" min="0" max="1" step="0.05" value="1" />
+            <div id="trimDurationVal" class="muted small">保留 0.0s</div>
+          </fieldset>
+          <div id="imageDurationField" class="field hidden">
+            <label>图片时长 <input id="imageDuration" type="number" min="0.1" max="60" step="0.1" value="3" class="num" />s</label>
+            <p class="muted small">图片会以静态画面循环为主轨片段；修改时长后会重建编辑代理。</p>
+          </div>
+
+          <div class="field">
+            <label>速度 <b id="speedVal">1.0×</b></label>
+            <input id="speed" type="range" min="0.25" max="4" step="0.05" value="1" />
+            <div class="chips" id="speedChips">
+              <button class="chip" data-speed="0.5">0.5×</button>
+              <button class="chip" data-speed="1">1×</button>
+              <button class="chip" data-speed="2">2×</button>
+              <button class="chip" data-speed="4">4×</button>
+            </div>
+          </div>
+          <fieldset class="field">
+            <legend>变速曲线预设</legend>
+            <div class="row">
+              <select id="speedCurvePreset">
+                <option value="montage">加速强调（1× → 2× → 1×）</option>
+                <option value="slowFocus">慢动作强调（1× → 0.5× → 1×）</option>
+                <option value="fastSlowFast">快慢快（2× → 0.5× → 2×）</option>
+              </select>
+              <button id="btnApplySpeedCurve" type="button" class="btn btn-small">应用曲线</button>
+            </div>
+            <p class="muted small">应用后会将当前片段均分为 3 段，以普通片段保存，便于继续逐段编辑或撤销。片段内的字幕、图层和独立音频会随新的变速时间重新定位。</p>
+          </fieldset>
+
+          <fieldset class="field">
+            <legend>片段原声</legend>
+            <label>音量 <b id="clipVolumeVal">100%</b></label>
+            <input id="clipVolume" type="range" min="0" max="2" step="0.01" value="1" />
+            <div class="field row">
+              <label>淡入 <input id="clipFadeIn" type="number" min="0" max="10" step="0.1" value="0" class="num" />s</label>
+              <label class="ml">淡出 <input id="clipFadeOut" type="number" min="0" max="10" step="0.1" value="0" class="num" />s</label>
+            </div>
+          </fieldset>
+
+          <div class="field row">
+            <label><input id="reverse" type="checkbox" /> 倒放</label>
+            <label class="ml">运动
+              <select id="motion">
+                <option value="none">无</option>
+                <option value="zoomIn">放大 (Ken Burns)</option>
+                <option value="zoomOut">缩小</option>
+              </select>
+            </label>
+          </div>
+          <fieldset class="field">
+            <legend>片段动画</legend>
+            <div class="field row">
+              <label>入场
+                <select id="animationInStyle">
+                  <option value="none">无</option>
+                  <option value="fade">淡入</option>
+                  <option value="slideLeft">左滑入</option>
+                  <option value="slideRight">右滑入</option>
+                  <option value="slideUp">上滑入</option>
+                  <option value="slideDown">下滑入</option>
+                </select>
+              </label>
+              <label class="ml">时长 <input id="animationInDuration" type="number" min="0" max="2" step="0.1" value="0" class="num" />s</label>
+            </div>
+            <div class="field row">
+              <label>出场
+                <select id="animationOutStyle">
+                  <option value="none">无</option>
+                  <option value="fade">淡出</option>
+                  <option value="slideLeft">左滑出</option>
+                  <option value="slideRight">右滑出</option>
+                  <option value="slideUp">上滑出</option>
+                  <option value="slideDown">下滑出</option>
+                </select>
+              </label>
+              <label class="ml">时长 <input id="animationOutDuration" type="number" min="0" max="2" step="0.1" value="0" class="num" />s</label>
+            </div>
+            <p class="muted small">动画不改变片段时长。导出时会自动限制到片段有效时长的一半，避免入场和出场重叠。</p>
+          </fieldset>
+          <div class="field row">
+            <label>防抖
+              <select id="stabilize">
+                <option value="off">关闭</option>
+                <option value="basic">标准</option>
+                <option value="strong">强力</option>
+              </select>
+            </label>
+          </div>
+          <p class="muted small">防抖、倒放、转场和运动动画只在成片预览或导出时完整渲染；强力防抖会增加渲染时间。</p>
+
+          <div class="field">
+            <label>填充方式</label>
+            <select id="clipFill">
+              <option value="">跟随画布</option>
+              <option value="pad">黑边</option>
+              <option value="blur">模糊背景</option>
+            </select>
+          </div>
+          <fieldset class="field">
+            <legend>画面变换</legend>
+            <div class="field row">
+              <label><input id="clipMirrorX" type="checkbox" /> 水平镜像</label>
+              <label class="ml"><input id="clipMirrorY" type="checkbox" /> 垂直镜像</label>
+            </div>
+            <label>旋转 <b id="clipRotationVal">0°</b></label>
+            <input id="clipRotation" type="range" min="-180" max="180" step="1" value="0" />
+            <div class="field row">
+              <label>左裁剪 <input id="clipCropLeft" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+              <label class="ml">右裁剪 <input id="clipCropRight" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+            </div>
+            <div class="field row">
+              <label>上裁剪 <input id="clipCropTop" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+              <label class="ml">下裁剪 <input id="clipCropBottom" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+            </div>
+            <label>不透明度 <b id="clipOpacityVal">100%</b></label>
+            <input id="clipOpacity" type="range" min="0" max="1" step="0.01" value="1" />
+            <label>缩放 <b id="clipTransformScaleVal">100%</b></label>
+            <input id="clipTransformScale" type="range" min="0.5" max="2" step="0.01" value="1" />
+            <div class="field row">
+              <label>横移 <input id="clipTransformX" type="number" min="-100" max="100" step="1" value="0" class="num" />%</label>
+              <label class="ml">纵移 <input id="clipTransformY" type="number" min="-100" max="100" step="1" value="0" class="num" />%</label>
+            </div>
+            <div class="keyframes clip-transform-keyframes">
+              <div class="row">
+                <label>变换关键帧时间 <input id="clipTransformKeyframeTime" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+                <label class="ml">曲线
+                  <select id="clipTransformKeyframeCurve">
+                    <option value="linear">线性</option>
+                    <option value="easeIn">缓入</option>
+                    <option value="easeOut">缓出</option>
+                    <option value="easeInOut">缓入缓出</option>
+                  </select>
+                </label>
+                <button id="btnAddClipTransformKeyframe" type="button" class="btn btn-small">＋ 记录当前变换</button>
+              </div>
+              <div id="clipTransformKeyframeList" class="keyframe-list"></div>
+              <p class="muted small">关键帧以当前片段的成片时间计时，可动画缩放、横移、纵移和不透明度；曲线在相邻关键帧之间生效。</p>
+            </div>
+          </fieldset>
+
+          <fieldset class="field">
+            <legend>调色</legend>
+            <label>亮度 <b id="briVal">0</b></label>
+            <input id="brightness" type="range" min="-0.5" max="0.5" step="0.01" value="0" />
+            <label>对比度 <b id="conVal">1.0</b></label>
+            <input id="contrast" type="range" min="0.5" max="2" step="0.01" value="1" />
+            <label>饱和度 <b id="satVal">1.0</b></label>
+            <input id="saturation" type="range" min="0" max="3" step="0.01" value="1" />
+            <label>色温 <b id="tempVal">0</b></label>
+            <input id="temperature" type="range" min="-100" max="100" step="1" value="0" />
+            <label>色相 <b id="hueVal">0°</b></label>
+            <input id="hue" type="range" min="-180" max="180" step="1" value="0" />
+            <label>Gamma <b id="gammaVal">1.00</b></label>
+            <input id="gamma" type="range" min="0.5" max="2" step="0.01" value="1" />
+            <div class="field row">
+              <label>曲线 <select id="colorCurve"><option value="none">无</option><option value="lift">提亮中间调</option><option value="contrast">S 对比曲线</option></select></label>
+              <button id="btnPickLut" type="button" class="btn btn-small">导入 LUT</button>
+              <button id="btnClearLut" type="button" class="btn btn-small hidden">清除 LUT</button>
+            </div>
+            <div id="lutName" class="muted small"></div>
+            <div class="chips" id="colorPresets">
+              <button class="chip" data-preset="none">原始</button>
+              <button class="chip" data-preset="warm">暖色</button>
+              <button class="chip" data-preset="cool">冷色</button>
+              <button class="chip" data-preset="vivid">鲜艳</button>
+              <button class="chip" data-preset="bw">黑白</button>
+            </div>
+          </fieldset>
+          <fieldset class="field">
+            <legend>片段特效</legend>
+            <div class="chips" id="effectPresets">
+              <button class="chip" data-effect="none">无</button>
+              <button class="chip" data-effect="mono">黑白电影</button>
+              <button class="chip" data-effect="vintage">复古胶片</button>
+              <button class="chip" data-effect="soft">柔光</button>
+              <button class="chip" data-effect="sharpen">锐化</button>
+            </div>
+            <label>暗角 <b id="vignetteVal">0%</b></label>
+            <input id="vignette" type="range" min="0" max="1" step="0.01" value="0" />
+            <label>颗粒 <b id="grainVal">0%</b></label>
+            <input id="grain" type="range" min="0" max="1" step="0.01" value="0" />
+            <p class="muted small">暗角和颗粒可叠加到任意调色或片段特效上；普通预览仅作近似显示，以成片预览或导出为准。</p>
+          </fieldset>
+
+          <div class="field" id="transitionField">
+            <label>与下一段的转场</label>
+            <select id="transStyle"></select>
+            <label>时长 <b id="transDurVal">0.0s</b></label>
+            <input id="transDur" type="range" min="0" max="2" step="0.1" value="0" />
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== B-roll video layer ===== -->
+      <div class="tabpane hidden" data-pane="broll">
+        <h3>视频层（B-roll）</h3>
+        <div class="row">
+          <button id="btnAddBroll" class="btn btn-small btn-primary">＋ 添加视频层</button>
+          <button id="btnAddVideoTrack" class="btn btn-small">＋ 新建视频轨</button>
+        </div>
+        <div class="row">
+          <select id="videoTrackSelect"></select>
+          <button id="btnVideoTrackUp" class="btn btn-small">↑ 轨道</button>
+          <button id="btnVideoTrackDown" class="btn btn-small">↓ 轨道</button>
+          <button id="btnToggleVideoTrack" class="btn btn-small">👁 轨道</button>
+          <button id="btnLockVideoLayerTrack" class="btn btn-small">🔓 轨道</button>
+          <button id="btnDeleteVideoTrack" class="btn btn-small btn-danger">删除空轨</button>
+        </div>
+        <div id="brollList" class="item-list"></div>
+        <div id="brollEditor" class="editor hidden">
+          <div id="brollName" class="editor-name"></div>
+          <div class="row">
+            <button id="btnBrollLayerUp" class="btn btn-small">↑ 上移视频层</button>
+            <button id="btnBrollLayerDown" class="btn btn-small">↓ 下移视频层</button>
+          </div>
+          <div class="field row">
+            <label>开始 <input id="brollStart" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+            <label class="ml">结束 <input id="brollEnd" type="number" min="0" step="0.1" value="3" class="num" />s</label>
+          </div>
+          <div class="field">
+            <label>所在视频轨 <select id="brollTrackSelect"></select></label>
+          </div>
+          <div class="field row">
+            <label>源起点 <input id="brollTrimStart" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+            <label class="ml"><input id="brollLoop" type="checkbox" checked /> 循环至结束</label>
+          </div>
+          <div class="field">
+            <label>不透明度 <b id="brollOpacityVal">100%</b></label>
+            <input id="brollOpacity" type="range" min="0" max="1" step="0.01" value="1" />
+          </div>
+          <div class="field">
+            <label>旋转 <b id="brollRotationVal">0°</b></label>
+            <input id="brollRotation" type="range" min="-180" max="180" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label>淡入淡出 <input id="brollFade" type="number" min="0" max="2" step="0.1" value="0" class="num" />s</label>
+          </div>
+          <p class="muted small">视频层默认铺满画布并静音；它位于主视频上方、文字和贴纸下方。</p>
+          <button id="btnDeleteBroll" class="btn btn-small btn-danger">删除此视频层</button>
+        </div>
+      </div>
+
+      <!-- ===== 画布 (global aspect + fill) ===== -->
+      <div class="tabpane hidden" data-pane="canvas">
+        <h3>输出画布</h3>
+        <div class="field">
+          <label>画幅比例</label>
+          <div class="chips" id="aspectChips">
+            <button class="chip" data-aspect="16:9">16:9 横屏</button>
+            <button class="chip" data-aspect="9:16">9:16 竖屏</button>
+            <button class="chip" data-aspect="1:1">1:1 方形</button>
+            <button class="chip" data-aspect="4:3">4:3</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>默认填充方式</label>
+          <select id="fillMode">
+            <option value="pad">黑边（letterbox）</option>
+            <option value="blur">模糊背景</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>画布背景色 <input id="canvasColor" type="color" value="#000000" /></label>
+          <div class="muted small">用于黑边填充及旋转后露出的画布区域。</div>
+        </div>
+        <div class="field row">
+          <label>导出分辨率
+            <select id="outputProfile">
+              <option value="720p">720p</option>
+              <option value="1080p">1080p</option>
+              <option value="2k">2K</option>
+              <option value="4k">4K</option>
+            </select>
+          </label>
+          <label class="ml">帧率
+            <select id="frameRate">
+              <option value="24">24 fps</option>
+              <option value="25">25 fps</option>
+              <option value="30" selected>30 fps</option>
+              <option value="50">50 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </label>
+        </div>
+        <div class="field muted" id="canvasInfo"></div>
+      </div>
+
+      <!-- ===== 文字/字幕 ===== -->
+      <div class="tabpane hidden" data-pane="text">
+        <h3>文字 / 字幕</h3>
+        <div class="row">
+          <button id="btnAddText" class="btn btn-small btn-primary">＋ 添加文字</button>
+          <button id="btnAutoSub" class="btn btn-small">🎤 自动字幕</button>
+          <button id="btnAutoSubAll" class="btn btn-small">🎤 识别全部</button>
+        </div>
+        <div class="row subtitle-actions">
+          <button id="btnImportSrt" class="btn btn-small">导入 SRT</button>
+          <button id="btnExportSrt" class="btn btn-small">导出 SRT</button>
+        </div>
+        <div id="autoSubHint" class="muted small"></div>
+        <div class="field caption-batch">
+          <label>字幕批量样式</label>
+          <div class="row">
+            <select id="captionPreset">
+              <option value="default">默认白字</option>
+              <option value="karaoke">白字黄高亮</option>
+              <option value="bold">居中大字</option>
+            </select>
+            <button id="btnApplyCaptionPreset" class="btn btn-small">应用到字幕</button>
+          </div>
+          <div class="row">
+            <input id="captionFind" type="text" placeholder="查找字幕…" />
+            <input id="captionReplace" type="text" placeholder="替换为…" />
+            <button id="btnReplaceCaptions" class="btn btn-small">全部替换</button>
+          </div>
+        </div>
+        <div id="textList" class="item-list"></div>
+        <div id="textEditor" class="editor hidden">
+          <textarea id="textContent" rows="2" placeholder="输入文字…"></textarea>
+          <textarea id="textSecondary" rows="1" placeholder="双语副文本（可选）…"></textarea>
+          <div class="field row">
+            <label>开始 <input id="textStart" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+            <label>结束 <input id="textEnd" type="number" min="0" step="0.1" value="2" class="num" />s</label>
+          </div>
+          <div class="field row">
+            <label>位置
+              <select id="textPos">
+                <option value="bottom">底部</option>
+                <option value="top">顶部</option>
+                <option value="center">居中</option>
+                <option value="bottom-left">左下</option>
+                <option value="bottom-right">右下</option>
+                <option value="top-left">左上</option>
+                <option value="top-right">右上</option>
+              </select>
+            </label>
+            <label class="ml">字号 <input id="textSize" type="number" min="12" max="200" step="2" value="48" class="num" /></label>
+          </div>
+          <div class="field">
+            <label>自由位置 <button id="btnResetTextPosition" type="button" class="btn btn-small">恢复预设位置</button></label>
+            <div class="field row">
+              <label>水平 <input id="textXPercent" type="range" min="0" max="100" step="1" value="50" /></label>
+              <label class="ml">垂直 <input id="textYPercent" type="range" min="0" max="100" step="1" value="88" /></label>
+            </div>
+          </div>
+          <div class="field row">
+            <label>字体
+              <select id="textFontFamily">
+                <option value="sans-serif">无衬线</option>
+                <option value="serif">衬线</option>
+                <option value="monospace">等宽</option>
+              </select>
+            </label>
+            <label class="ml"><input id="textBold" type="checkbox" /> 粗体</label>
+            <label class="ml"><input id="textItalic" type="checkbox" /> 斜体</label>
+          </div>
+          <div class="field row">
+            <label>颜色 <input id="textColor" type="color" value="#ffffff" /></label>
+            <label class="ml">描边 <input id="textOutline" type="color" value="#000000" /></label>
+            <label class="ml">淡入淡出 <input id="textFade" type="number" min="0" max="2" step="0.1" value="0" class="num" />s</label>
+          </div>
+          <div class="field row">
+            <label>描边粗细 <input id="textOutlineWidth" type="number" min="0" max="12" step="0.5" value="2" class="num" /></label>
+            <label class="ml">阴影 <input id="textShadow" type="number" min="0" max="12" step="0.5" value="0" class="num" /></label>
+            <label class="ml">字距 <input id="textSpacing" type="number" min="-5" max="20" step="0.5" value="0" class="num" /></label>
+          </div>
+          <div class="field">
+            <label>透明度 <b id="textOpacityVal">100%</b></label>
+            <input id="textOpacity" type="range" min="0" max="1" step="0.01" value="1" />
+          </div>
+          <div class="field row">
+            <label><input id="textKaraoke" type="checkbox" /> 逐字高亮</label>
+            <label class="ml">高亮色 <input id="textHighlightColor" type="color" value="#ffd54a" /></label>
+          </div>
+          <p class="muted small">逐字高亮按当前字幕条目的时长均分字符节奏，适合节奏化字幕；不是语音模型逐词时间戳。</p>
+          <div class="row">
+            <button id="btnSplitCaption" class="btn btn-small">✂ 在播放头拆分</button>
+            <button id="btnMergeCaption" class="btn btn-small">合并下一条</button>
+            <button id="btnDeleteText" class="btn btn-small btn-danger">删除此条</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 叠加素材 (PiP / sticker) ===== -->
+      <div class="tabpane hidden" data-pane="overlay">
+        <h3>叠加素材（画中画 / 贴纸）</h3>
+        <button id="btnAddOverlay" class="btn btn-small btn-primary">＋ 添加图片/视频</button>
+        <div id="overlayList" class="item-list"></div>
+        <div id="overlayEditor" class="editor hidden">
+          <div class="editor-name" id="overlayName"></div>
+          <div class="row">
+            <button id="btnOverlayLayerUp" class="btn btn-small">↑ 上移图层</button>
+            <button id="btnOverlayLayerDown" class="btn btn-small">↓ 下移图层</button>
+          </div>
+          <div class="field row">
+            <label>开始 <input id="ovStart" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+            <label>结束 <input id="ovEnd" type="number" min="0" step="0.1" value="3" class="num" />s</label>
+          </div>
+          <div class="field">
+            <label>大小 <b id="ovScaleVal">40%</b></label>
+            <input id="ovScale" type="range" min="0.05" max="1" step="0.01" value="0.4" />
+          </div>
+          <div class="field row">
+            <label>X <input id="ovX" type="number" step="1" value="40" class="num" /></label>
+            <label class="ml">Y <input id="ovY" type="number" step="1" value="40" class="num" /></label>
+          </div>
+          <div class="field">
+            <label>不透明度 <b id="ovOpacityVal">100%</b></label>
+            <input id="ovOpacity" type="range" min="0" max="1" step="0.01" value="1" />
+          </div>
+          <div class="field">
+            <label>旋转 <b id="ovRotationVal">0°</b></label>
+            <input id="ovRotation" type="range" min="-180" max="180" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label>淡入淡出 <input id="ovFade" type="number" min="0" max="2" step="0.1" value="0" class="num" />s</label>
+          </div>
+          <fieldset class="field">
+            <legend>画面处理</legend>
+            <div class="field row">
+              <label><input id="ovMirrorX" type="checkbox" /> 水平镜像</label>
+              <label class="ml"><input id="ovMirrorY" type="checkbox" /> 垂直镜像</label>
+              <label class="ml">蒙版 <select id="ovMask"><option value="none">无</option><option value="ellipse">椭圆</option><option value="rounded">圆角矩形</option></select></label>
+              <label class="ml"><input id="ovMaskInvert" type="checkbox" /> 反转</label>
+            </div>
+            <div class="field row">
+              <label>左裁 <input id="ovCropLeft" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+              <label class="ml">右裁 <input id="ovCropRight" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+            </div>
+            <div class="field row">
+              <label>上裁 <input id="ovCropTop" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+              <label class="ml">下裁 <input id="ovCropBottom" type="number" min="0" max="45" step="1" value="0" class="num" />%</label>
+              <label class="ml">羽化 <input id="ovMaskFeather" type="number" min="0" max="25" step="1" value="0" class="num" />%</label>
+            </div>
+            <div class="field">
+              <label>混合模式 <select id="ovBlendMode"><option value="normal">正常</option><option value="screen">滤色</option><option value="multiply">正片叠底</option><option value="addition">线性减淡</option></select></label>
+            </div>
+            <div class="field row">
+              <label><input id="ovChromaEnabled" type="checkbox" /> 色键抠像</label>
+              <label class="ml">颜色 <input id="ovChromaColor" type="color" value="#00ff00" /></label>
+              <label class="ml">相似度 <input id="ovChromaSimilarity" type="number" min="0.01" max="1" step="0.01" value="0.1" class="num" /></label>
+            </div>
+          </fieldset>
+          <div class="field row">
+            <label><input id="ovMoveEnable" type="checkbox" /> 线性移动到</label>
+            <label class="ml">X <input id="ovMoveX" type="number" step="1" value="200" class="num" disabled /></label>
+            <label class="ml">Y <input id="ovMoveY" type="number" step="1" value="40" class="num" disabled /></label>
+          </div>
+          <fieldset class="field keyframes">
+            <legend>关键帧动画</legend>
+            <div class="field row">
+              <label>时间 <input id="keyframeNewTime" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+              <button id="btnAddKeyframe" class="btn btn-small">＋ 记录当前属性</button>
+            </div>
+            <div id="keyframeList" class="keyframe-list"></div>
+            <div id="keyframeEditor" class="keyframe-editor hidden">
+              <div class="field row">
+                <label>时间 <input id="kfTime" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+                <label class="ml">曲线
+                  <select id="kfCurve">
+                    <option value="linear">线性</option>
+                    <option value="easeIn">缓入</option>
+                    <option value="easeOut">缓出</option>
+                    <option value="easeInOut">缓入缓出</option>
+                    <option value="bezier">自定义贝塞尔</option>
+                  </select>
+                </label>
+              </div>
+              <div id="kfBezierControls" class="field row hidden">
+                <label>x1 <input id="kfBezierX1" type="number" min="0" max="1" step="0.05" value="0.25" class="num" /></label>
+                <label>y1 <input id="kfBezierY1" type="number" min="0" max="1" step="0.05" value="0.1" class="num" /></label>
+                <label>x2 <input id="kfBezierX2" type="number" min="0" max="1" step="0.05" value="0.25" class="num" /></label>
+                <label>y2 <input id="kfBezierY2" type="number" min="0" max="1" step="0.05" value="1" class="num" /></label>
+              </div>
+              <div class="field row">
+                <label>X <input id="kfX" type="number" step="1" value="40" class="num" /></label>
+                <label class="ml">Y <input id="kfY" type="number" step="1" value="40" class="num" /></label>
+              </div>
+              <div class="field row">
+                <label>大小 <input id="kfScale" type="number" min="0.02" max="1" step="0.01" value="0.4" class="num" /></label>
+                <label class="ml">不透明度 <input id="kfOpacity" type="number" min="0" max="1" step="0.01" value="1" class="num" /></label>
+              </div>
+              <div class="field row">
+                <label>旋转 <input id="kfRotation" type="number" min="-3600" max="3600" step="1" value="0" class="num" />°</label>
+              </div>
+              <button id="btnDeleteKeyframe" class="btn btn-small btn-danger">删除此关键帧</button>
+            </div>
+            <p class="muted small">关键帧可控制位置、大小和不透明度；曲线定义到下一关键帧的插值。导出与预览共用同一计算规则。</p>
+          </fieldset>
+          <div class="row">
+            <button id="btnDeleteOverlay" class="btn btn-small btn-danger">删除此素材</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 音频 ===== -->
+      <div class="tabpane hidden" data-pane="audio">
+        <h3>音频</h3>
+        <div class="row">
+          <button id="btnMusic" class="btn btn-small">♪ 添加背景音乐</button>
+          <button id="btnRemoveMusic" class="btn btn-small btn-danger hidden">移除</button>
+        </div>
+        <div id="musicName" class="music-name"></div>
+        <div id="volumeRow" class="hidden">
+          <div class="field">
+            <label>原声音量 <b id="volOriginalVal">100%</b></label>
+            <input id="volOriginal" type="range" min="0" max="1" step="0.01" value="1" />
+          </div>
+          <div class="field">
+            <label>音乐音量 <b id="volBgmVal">50%</b></label>
+            <input id="volBgm" type="range" min="0" max="1" step="0.01" value="0.5" />
+          </div>
+          <div class="field">
+            <label><input id="bgmDuck" type="checkbox" /> 人声时自动压低背景音乐</label>
+            <div id="bgmDuckControls" class="hidden">
+              <label>闪避强度 <b id="bgmDuckAmountVal">35%</b></label>
+              <input id="bgmDuckAmount" type="range" min="0.1" max="0.8" step="0.05" value="0.35" />
+            </div>
+          </div>
+        </div>
+        <div id="bgmClipControls" class="field row hidden">
+          <label>音乐源起点 <input id="bgmTrimStart" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+          <label class="ml">淡入 <input id="bgmFadeIn" type="number" min="0" max="10" step="0.1" value="0" class="num" />s</label>
+          <label class="ml">淡出 <input id="bgmFadeOut" type="number" min="0" max="10" step="0.1" value="0" class="num" />s</label>
+        </div>
+        <div class="field">
+          <label><input id="loudnessNormalize" type="checkbox" /> 导出时统一响度（目标 -14 LUFS）</label>
+        </div>
+        <p class="muted small">背景音乐会自动循环铺满整条时间线。自动闪避根据主视频原声检测人声/前景声音；响度归一只在最终导出时生效。</p>
+        <hr class="pane-divider" />
+        <h3>独立音频轨</h3>
+        <div class="row">
+          <button id="btnAddAudioTrack" class="btn btn-small btn-primary">＋ 添加音频片段</button>
+          <button id="btnRecordVoice" class="btn btn-small">● 录制旁白</button>
+          <button id="btnStopVoice" class="btn btn-small btn-danger hidden">■ 停止</button>
+        </div>
+        <div id="voiceRecordStatus" class="muted small">录音会从当前播放头位置插入时间线。首次使用会请求系统麦克风权限。</div>
+        <div id="audioTrackList" class="item-list"></div>
+        <div id="audioTrackEditor" class="editor hidden">
+          <div id="audioTrackName" class="editor-name"></div>
+          <div class="field row">
+            <label>开始 <input id="audioTrackStart" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+            <label class="ml">结束 <input id="audioTrackEnd" type="number" min="0" step="0.1" value="3" class="num" />s</label>
+          </div>
+          <div class="row">
+            <button id="btnSplitAudioTrack" class="btn btn-small">✂ 在播放头处分割音频</button>
+          </div>
+          <div class="field row">
+            <label>源起点 <input id="audioTrackTrimStart" type="number" min="0" step="0.1" value="0" class="num" />s</label>
+            <label class="ml"><input id="audioTrackLoop" type="checkbox" /> 循环至结束</label>
+          </div>
+          <div class="field">
+            <label>音量 <b id="audioTrackVolumeVal">100%</b></label>
+            <input id="audioTrackVolume" type="range" min="0" max="2" step="0.01" value="1" />
+          </div>
+          <div class="field row">
+            <label>淡入 <input id="audioTrackFadeIn" type="number" min="0" max="10" step="0.1" value="0" class="num" />s</label>
+            <label class="ml">淡出 <input id="audioTrackFadeOut" type="number" min="0" max="10" step="0.1" value="0" class="num" />s</label>
+          </div>
+          <fieldset class="field">
+            <legend>局部静音</legend>
+            <button id="btnAddAudioMute" class="btn btn-small">🔇 静音播放头附近 1 秒</button>
+            <div id="audioMuteList" class="keyframe-list"></div>
+            <p class="muted small">静音区间随音频片段移动，不会改变片段时长。</p>
+          </fieldset>
+          <fieldset class="field">
+            <legend>人声处理</legend>
+            <label><input id="audioTrackDenoise" type="checkbox" /> 基础降噪</label>
+            <label><input id="audioTrackVoiceEnhance" type="checkbox" /> 人声增强（动态响度）</label>
+            <div class="field row">
+              <label>速度 <input id="audioTrackSpeed" type="number" min="0.25" max="4" step="0.05" value="1" class="num" />×</label>
+              <label class="ml">音高 <input id="audioTrackPitch" type="number" min="-12" max="12" step="1" value="0" class="num" /> 半音</label>
+            </div>
+          </fieldset>
+          <button id="btnDeleteAudioTrack" class="btn btn-small btn-danger">删除此音频片段</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Timeline -->
+  <section class="timeline">
+    <div class="timeline-head">
+      <span class="timeline-title">时间线</span>
+      <span id="timelineHint" class="hint"></span>
+      <div class="timeline-zoom">
+        <button id="btnTimelineZoomOut" class="btn btn-small" title="缩小时间线">−</button>
+        <span id="timelineZoomLabel" class="muted small">100%</span>
+        <button id="btnTimelineZoomIn" class="btn btn-small" title="放大时间线">＋</button>
+      </div>
+    </div>
+    <div id="timelineViewport" class="timeline-viewport">
+      <div id="timelineRuler" class="timeline-ruler"></div>
+      <div id="timelineTrack" class="timeline-track">
+        <div id="timelinePlayhead" class="timeline-playhead hidden"></div>
+        <div id="videoTrackLane" class="timeline-lane timeline-video-lane" data-lane-label="视频">
+          <div class="lane-controls">
+            <button id="btnLockVideoTrack" class="lane-btn" title="锁定主视频轨">🔓</button>
+          </div>
+          <div id="clips" class="clips">
+            <div id="timelineEmpty" class="timeline-empty">还没有片段，点右上角「导入视频」</div>
+          </div>
+        </div>
+        <div id="brollTrackLane" class="timeline-lane timeline-broll-lane" data-lane-label="视频层"><div class="lane-controls"><button id="btnToggleBroll" class="lane-btn" title="隐藏视频层轨">👁</button><button id="btnLockBroll" class="lane-btn" title="锁定视频层轨">🔓</button></div></div>
+        <div id="overlayTrackLane" class="timeline-lane timeline-media-lane" data-lane-label="叠加"><div class="lane-controls"><button id="btnToggleOverlay" class="lane-btn" title="隐藏叠加轨">👁</button><button id="btnLockOverlay" class="lane-btn" title="锁定叠加轨">🔓</button></div></div>
+        <div id="textTrackLane" class="timeline-lane timeline-media-lane" data-lane-label="文字"><div class="lane-controls"><button id="btnToggleText" class="lane-btn" title="隐藏文字轨">👁</button><button id="btnLockText" class="lane-btn" title="锁定文字轨">🔓</button></div></div>
+        <div id="audioTrackLane" class="timeline-lane timeline-audio-lane" data-lane-label="音频"><div class="lane-controls"><button id="btnMuteAudio" class="lane-btn" title="静音独立音频轨">🔊</button><button id="btnLockAudio" class="lane-btn" title="锁定音频轨">🔓</button></div></div>
+      </div>
+    </div>
+  </section>
+
+  <script src="timeline-utils.js"></script>
+  <script src="keyframe-utils.js"></script>
+  <script src="clip-transform-utils.js"></script>
+  <script src="clip-appearance.js"></script>
+  <script src="i18n.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

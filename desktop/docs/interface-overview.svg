@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">MiniClip desktop interface overview</title>
+  <desc id="desc">An annotated Chinese MiniClip desktop editor interface showing the language menu, toolbar, preview, inspector, and timeline.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#1e2025"/><stop offset="1" stop-color="#17191d"/></linearGradient>
+    <style>
+      .ui{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}.small{font-size:13px}.body{font-size:16px}.title{font-size:18px;font-weight:700}.hint{font-size:14px;fill:#b9c1cf}.label{font-size:14px;font-weight:700;fill:#f3f6fb}.muted{fill:#a8b0bd}.call{fill:#5b8cff}.line{stroke:#75a0ff;stroke-width:2;fill:none}.number{font-size:16px;font-weight:700;fill:#fff;text-anchor:middle;dominant-baseline:middle}
+    </style>
+  </defs>
+  <rect width="1200" height="700" rx="18" fill="#101216"/>
+  <rect x="28" y="28" width="1144" height="644" rx="12" fill="url(#bg)" stroke="#4b5260"/>
+  <rect x="28" y="28" width="1144" height="56" rx="12" fill="#2b2e34"/>
+  <g class="ui">
+    <text x="48" y="63" class="title" fill="#fff">MiniClip</text>
+    <rect x="142" y="43" width="92" height="28" rx="6" fill="#383c45" stroke="#4d5360"/><text x="154" y="62" class="small" fill="#c7ced8">语言 · 中文⌄</text>
+    <g fill="#383c45" stroke="#4d5360"><rect x="420" y="43" width="74" height="28" rx="6"/><rect x="503" y="43" width="74" height="28" rx="6"/><rect x="586" y="43" width="80" height="28" rx="6"/><rect x="675" y="43" width="92" height="28" rx="6"/></g>
+    <text x="437" y="62" class="small" fill="#e8edf5">打开工程</text><text x="520" y="62" class="small" fill="#e8edf5">保存工程</text><text x="604" y="62" class="small" fill="#e8edf5">↶ 撤销</text><text x="692" y="62" class="small" fill="#e8edf5">＋ 导入媒体</text>
+    <rect x="1044" y="43" width="104" height="28" rx="6" fill="#5b8cff"/><text x="1072" y="62" class="small" fill="#fff">⤴ 导出</text>
+    <rect x="28" y="84" width="785" height="390" fill="#08090b"/>
+    <rect x="93" y="124" width="650" height="300" rx="4" fill="#151922" stroke="#373f4d"/><path d="M94 350 C210 210 300 410 430 260 S630 180 742 330V424H94Z" fill="#263b62"/><circle cx="405" cy="264" r="38" fill="#5b8cff"/><path d="M396 244 L396 284 L425 264Z" fill="#fff"/>
+    <rect x="335" y="438" width="170" height="28" rx="14" fill="rgba(28,31,37,.95)"/><text x="357" y="457" class="small" fill="#fff">▶ 播放</text><text x="423" y="457" class="small" fill="#a8b0bd">0.0 / 0.0s</text>
+    <rect x="813" y="84" width="359" height="390" fill="#2b2e34"/><rect x="813" y="84" width="359" height="40" fill="#30343b"/>
+    <text x="840" y="109" class="small" fill="#fff">片段</text><text x="889" y="109" class="small muted">视频层</text><text x="947" y="109" class="small muted">画布</text><text x="995" y="109" class="small muted">文字</text><text x="1043" y="109" class="small muted">叠加</text><text x="1090" y="109" class="small muted">音频</text><rect x="829" y="120" width="47" height="3" fill="#5b8cff"/>
+    <text x="838" y="164" class="title" fill="#fff">片段编辑</text><text x="838" y="197" class="small muted">裁剪、速度、转场、调色</text>
+    <rect x="838" y="215" width="308" height="54" rx="7" fill="#343944"/><text x="851" y="238" class="small" fill="#cbd2dc">速度</text><line x1="851" y1="255" x2="1127" y2="255" stroke="#596170" stroke-width="4"/><circle cx="989" cy="255" r="7" fill="#5b8cff"/>
+    <rect x="838" y="286" width="308" height="76" rx="7" fill="#343944"/><text x="851" y="309" class="small" fill="#cbd2dc">调色预设</text><g fill="#454b57"><rect x="851" y="323" width="43" height="24" rx="12"/><rect x="900" y="323" width="43" height="24" rx="12"/><rect x="949" y="323" width="43" height="24" rx="12"/></g><text x="860" y="340" class="small" fill="#fff">原始</text><text x="910" y="340" class="small" fill="#fff">暖色</text><text x="959" y="340" class="small" fill="#fff">冷色</text>
+    <rect x="28" y="474" width="1144" height="198" rx="0 0 12 12" fill="#1e2025" stroke="#414754"/>
+    <text x="48" y="508" class="title" fill="#fff">时间线</text><text x="125" y="508" class="hint">点击定位 · 拖动播放头 · Ctrl/⌘+B 分割</text>
+    <line x1="90" y1="535" x2="1147" y2="535" stroke="#4b5360"/><g class="small muted"><text x="100" y="529">0s</text><text x="270" y="529">2s</text><text x="440" y="529">4s</text><text x="610" y="529">6s</text><text x="780" y="529">8s</text><text x="950" y="529">10s</text></g>
+    <text x="43" y="576" class="small muted">视频</text><rect x="90" y="548" width="250" height="48" rx="5" fill="#42536f" stroke="#6f89b4"/><rect x="344" y="548" width="212" height="48" rx="5" fill="#42536f" stroke="#6f89b4"/><text x="108" y="577" class="small" fill="#eef4ff">片段 1</text><text x="362" y="577" class="small" fill="#eef4ff">片段 2</text>
+    <text x="42" y="632" class="small muted">文字</text><rect x="280" y="607" width="168" height="30" rx="5" fill="#5b437b" stroke="#9375bd"/><text x="294" y="628" class="small" fill="#f2ebff">T 字幕条</text>
+    <line x1="390" y1="532" x2="390" y2="649" stroke="#ff6262" stroke-width="2"/><path d="M384 534H396L390 542Z" fill="#ff6262"/>
+    <circle cx="185" cy="25" r="15" class="call"/><text x="185" y="26" class="ui number">1</text><path d="M185 40 L185 42" class="line"/>
+    <circle cx="776" cy="39" r="15" class="call"/><text x="776" y="40" class="ui number">2</text><path d="M791 39 L1038 54" class="line"/>
+    <circle cx="773" cy="190" r="15" class="call"/><text x="773" y="191" class="ui number">3</text><path d="M788 190 L827 190" class="line"/>
+    <circle cx="32" cy="495" r="15" class="call"/><text x="32" y="496" class="ui number">4</text><path d="M47 495 L72 495" class="line"/>
+  </g>
+  <g class="ui"><rect x="50" y="682" width="1100" height="1" fill="#3c4350"/><text x="66" y="658" class="label">1 语言切换</text><text x="250" y="658" class="label">2 工程与导出</text><text x="490" y="658" class="label">3 参数检查器</text><text x="730" y="658" class="label">4 多轨时间线</text></g>
+</svg>

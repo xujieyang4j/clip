@@ -1,0 +1,68 @@
+# XcodeGen 工程描述文件。
+# 在 Mac 上执行 `xcodegen generate` 会根据这里的配置生成 MiniClip.xcodeproj，
+# 自动包含 Sources/ 下的 4 个 swift 文件、iOS/macOS 双平台、以及所有必需的权限设置。
+#
+# 好处：不用在 Xcode 里手动新建工程、手动拖文件、手动点权限——全部由这份文件描述。
+# 每次改了这份文件或增删源文件，重新跑一次 `xcodegen generate` 即可。
+
+name: MiniClip
+
+options:
+  bundleIdPrefix: com.example
+  # 双平台各自的最低系统版本。代码用到 ShareLink / draggable / async 加载，
+  # 所以 iOS 至少 16、macOS 至少 13。
+  deploymentTarget:
+    iOS: "16.0"
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  MiniClip:
+    type: application
+    # 一个目标同时支持 iPhone/iPad 和 Mac。Xcode 里顶部切换运行目标即可，
+    # 不用维护两套工程。
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.MiniClip
+        PRODUCT_NAME: MiniClip
+        # 自动生成 Info.plist，权限文案直接写成下面的 INFOPLIST_KEY_* 即可，
+        # 省得单独维护一个 Info.plist 文件。
+        GENERATE_INFOPLIST_FILE: YES
+
+        # —— iOS 权限 / 外观 ——
+        # 从「文件」App 导入视频其实走的是文档选择器，不强制要相册权限；
+        # 但保留这条文案，方便你以后改用相册选择器（PhotosPicker）时不用再配。
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "需要访问相册来导入视频"
+        # 生成默认启动屏，App 才会以全分辨率运行。
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+
+        # —— macOS 相关 ——
+        # 归入「视频」分类（仅 App Store 展示用，本地跑无所谓）。
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.video"
+        # macOS 沙盒默认禁止读任意文件，这份 entitlements 打开「用户选择的文件读写」，
+        # 否则导入/导出会失败。用 [sdk=macosx*] 限定只在 Mac 构建时生效，iOS 不受影响。
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Sources/MiniClip-macOS.entitlements
+
+        # 自动签名。装到真机时，在 Xcode 里 Signing & Capabilities 选你的 Apple ID Team 即可。
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  MiniClip:
+    build:
+      targets:
+        MiniClip: all
+    run:
+      config: Debug
+    archive:
+      config: Release

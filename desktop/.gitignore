@@ -1,0 +1,11 @@
+node_modules/
+dist/
+out/
+*.log
+assets/models/*.bin
+assets/models/*.part
+assets/fonts/*.otf
+assets/fonts/*.ttf
+assets/fonts/*.ttc
+.DS_Store
+npm-debug.log*

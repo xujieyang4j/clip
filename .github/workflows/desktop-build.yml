@@ -1,0 +1,116 @@
+name: Desktop Build
+
+# 在 macOS / Windows / Linux 三台机器上分别打包 MiniClip 桌面版。
+#
+# 触发方式：
+#   - 手动：Actions 页面点 "Run workflow"（workflow_dispatch）
+#   - 打 tag：推送形如 v1.0.0 的 tag 时自动构建；若带 tag，还会把安装包
+#     作为附件发布到对应的 GitHub Release。
+#
+# 产物：每个平台的安装包都会作为 workflow artifact 上传，可在运行页下载。
+# ffmpeg/electron 二进制通过 .npmrc + postinstall(scripts/fetch-binaries.js)
+# 下载；CI 里 GitHub 到官方源很快，无需镜像（如需镜像见下方 env 注释）。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+# 允许创建 Release（打 tag 时用到）。
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 一台失败不影响其它平台继续出包。
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: MiniClip-macos-arm64
+            arch: arm64
+            # 打包出来的分发文件（dmg/zip 等）都在 desktop/dist 下
+          - os: macos-15-intel
+            artifact: MiniClip-macos-x64
+            arch: x64
+          - os: windows-latest
+            artifact: MiniClip-windows
+            arch: x64
+          - os: ubuntu-latest
+            artifact: MiniClip-linux
+            arch: x64
+
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      # 如果 CI 机器访问官方源慢，取消下面两行注释即可改走国内镜像。
+      # env:
+      #   ELECTRON_MIRROR: https://registry.npmmirror.com/-/binary/electron/
+      #   FFMPEG_BINARIES_URL: https://registry.npmmirror.com/-/binary/ffmpeg-static
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # Force a portable CPU-only smart-whisper build. In particular this
+          # prevents Linux CI from accidentally linking to runner-only OpenBLAS.
+          COMPUTE_BACKEND: cpu
+
+      - name: Rebuild native modules for Electron
+        run: npx electron-builder install-app-deps --arch=${{ matrix.arch }}
+        env:
+          COMPUTE_BACKEND: cpu
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build installers
+        # --publish never：只打包，不自动上传（发布交给后面的 release 步骤）。
+        run: npx electron-builder --${{ runner.os == 'macOS' && 'mac' || runner.os == 'Windows' && 'win' || 'linux' }} --${{ matrix.arch }} --publish never
+        env:
+          # 供 electron-builder 打 GitHub Release 用（此步不发布，仅避免告警）。
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMPUTE_BACKEND: cpu
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          # 只收分发用的成品，跳过解包目录与 blockmap。
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Attach to GitHub Release
+        # 仅在推送 tag 时把成品挂到对应 Release。
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

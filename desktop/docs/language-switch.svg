@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="320" viewBox="0 0 1120 320" role="img" aria-labelledby="title desc">
+  <title id="title">Switch MiniClip between Chinese and English</title>
+  <desc id="desc">A three step diagram showing the Language selector, choosing English, and the selection being saved for the next launch.</desc>
+  <defs><style>.ui{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}.h{font-size:20px;font-weight:700;fill:#f6f8fc}.t{font-size:16px;fill:#c8d0dc}.n{font-size:17px;font-weight:700;fill:#fff;text-anchor:middle;dominant-baseline:middle}</style></defs>
+  <rect width="1120" height="320" rx="18" fill="#171a20"/>
+  <g class="ui">
+    <circle cx="103" cy="56" r="20" fill="#5b8cff"/><text x="103" y="57" class="n">1</text><text x="137" y="62" class="h">打开语言菜单</text>
+    <rect x="68" y="95" width="260" height="130" rx="10" fill="#2b3039" stroke="#495362"/><text x="92" y="130" class="t">MiniClip</text><rect x="192" y="112" width="110" height="34" rx="6" fill="#3a414e" stroke="#5b6473"/><text x="206" y="134" class="t">语言 · 中文⌄</text><text x="92" y="190" class="t">首次启动默认显示中文</text>
+    <path d="M355 160 H425" stroke="#5b8cff" stroke-width="4"/><path d="M425 160 l-12 -9 v18z" fill="#5b8cff"/>
+    <circle cx="495" cy="56" r="20" fill="#5b8cff"/><text x="495" y="57" class="n">2</text><text x="529" y="62" class="h">选择 English 或 中文</text>
+    <rect x="455" y="95" width="260" height="130" rx="10" fill="#2b3039" stroke="#495362"/><rect x="485" y="111" width="190" height="36" rx="6" fill="#3a414e"/><text x="502" y="135" class="t">Language · English⌃</text><rect x="485" y="148" width="190" height="62" rx="6" fill="#20242b" stroke="#5b6473"/><text x="505" y="173" class="t">中文</text><rect x="492" y="181" width="176" height="23" rx="4" fill="#5b8cff"/><text x="505" y="199" class="t" fill="#fff">English</text>
+    <path d="M744 160 H814" stroke="#5b8cff" stroke-width="4"/><path d="M814 160 l-12 -9 v18z" fill="#5b8cff"/>
+    <circle cx="882" cy="56" r="20" fill="#5b8cff"/><text x="882" y="57" class="n">3</text><text x="916" y="62" class="h">立即生效并自动记住</text>
+    <rect x="844" y="95" width="230" height="130" rx="10" fill="#2b3039" stroke="#495362"/><text x="873" y="135" class="h">Open Project</text><text x="873" y="168" class="t">Import Media</text><text x="873" y="197" class="t">Timeline</text>
+    <text x="62" y="280" class="t">提示：桌面版与 Swift 原型都保存选择；下次启动仍使用上一次的界面语言。</text>
+  </g>
+</svg>

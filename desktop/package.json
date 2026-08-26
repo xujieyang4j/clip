@@ -1,0 +1,73 @@
+{
+  "name": "miniclip-desktop",
+  "productName": "MiniClip",
+  "version": "1.0.0",
+  "description": "最小视频剪辑原型（桌面版）：导入 → 裁剪/拼接/排序 → 预览 → 导出 mp4。基于 Electron + FFmpeg，可在 macOS / Windows / Linux 运行。",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "node scripts/fetch-binaries.js",
+    "fetch:binaries": "node scripts/fetch-binaries.js",
+    "fetch:font": "node scripts/fetch-font.js",
+    "fetch:whisper-model": "node scripts/fetch-whisper-model.js",
+    "rebuild:native": "node scripts/rebuild-native.js",
+    "test:whisper": "node test/whisper-e2e.test.js",
+    "test": "node test/ffmpeg-graph.test.js && node test/ass-builder.test.js && node test/ffmpeg-runner.test.js && node test/whisper-runner.test.js && node test/timeline-utils.test.js && node test/keyframe-utils.test.js && node test/clip-transform-utils.test.js && node test/clip-appearance.test.js && node test/srt-utils.test.js && node test/project-file.test.js && node test/project-store.test.js && node test/recording-store.test.js && node test/i18n.test.js && node test/renderer-smoke.test.js",
+    "test:e2e": "node test/e2e-export.test.js",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0"
+  },
+  "optionalDependencies": {
+    "smart-whisper": "^0.8.1"
+  },
+  "build": {
+    "appId": "com.example.miniclip",
+    "productName": "MiniClip",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**",
+      "!assets/models/*.bin",
+      "!test/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**",
+      "node_modules/smart-whisper/**",
+      "assets/**"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.video"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo"
+    }
+  }
+}
