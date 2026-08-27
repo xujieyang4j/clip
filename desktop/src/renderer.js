@@ -94,12 +94,15 @@ const state = {
   canvasColor: '#000000',
   outputProfile: '1080p',
   frameRate: 30,
+  snapEnabled: true,
+  markers: [],      // { id, time } persistent final-timeline markers
   selectedClipId: null,
   selectedTextId: null,
   selectedOverlayId: null,
   selectedBrollId: null,
   selectedVideoTrackId: 'video-1',
   selectedAudioTrackId: null,
+  selectedMarkerId: null,
   selectedKeyframeTime: null,
   exportedPath: null,
   projectPath: null,
@@ -158,8 +161,8 @@ function restoreProjectState(saved) {
     overlays: (data.overlays || []).map((overlay) => Object.assign({}, overlay, { url: urlForLocalPath(overlay.path) })),
     brolls: (data.brolls || []).map((broll) => Object.assign({}, broll, { url: urlForLocalPath(broll.path) })),
     videoTracks: data.videoTracks || [{ id: 'video-1', name: '视频层 1', visible: true, locked: false }],
-    audioTracks: data.audioTracks || [],
-    selectedClipId: null, selectedTextId: null, selectedOverlayId: null, selectedBrollId: null, selectedVideoTrackId: data.selectedVideoTrackId || 'video-1', selectedAudioTrackId: null, selectedKeyframeTime: null,
+    audioTracks: data.audioTracks || [], markers: data.markers || [], snapEnabled: data.snapEnabled !== false,
+    selectedClipId: null, selectedTextId: null, selectedOverlayId: null, selectedBrollId: null, selectedVideoTrackId: data.selectedVideoTrackId || 'video-1', selectedAudioTrackId: null, selectedMarkerId: null, selectedKeyframeTime: null,
     exportedPath: null,
   });
   undoStack.length = 0;
@@ -169,10 +172,10 @@ function restoreProjectState(saved) {
 
 function snapshot() {
   return JSON.stringify({
-    clips: state.clips, texts: state.texts, overlays: state.overlays, brolls: state.brolls, videoTracks: state.videoTracks, selectedVideoTrackId: state.selectedVideoTrackId, audioTracks: state.audioTracks,
+    clips: state.clips, texts: state.texts, overlays: state.overlays, brolls: state.brolls, videoTracks: state.videoTracks, selectedVideoTrackId: state.selectedVideoTrackId, audioTracks: state.audioTracks, markers: state.markers,
     bgm: state.bgm, originalVolume: state.originalVolume, bgmVolume: state.bgmVolume,
     bgmDuck: state.bgmDuck, bgmDuckAmount: state.bgmDuckAmount, loudnessNormalize: state.loudnessNormalize, videoTrackLocked: state.videoTrackLocked, trackControls: state.trackControls, exportPreset: state.exportPreset,
-    aspect: state.aspect, fillMode: state.fillMode, canvasColor: state.canvasColor, outputProfile: state.outputProfile, frameRate: state.frameRate,
+    aspect: state.aspect, fillMode: state.fillMode, canvasColor: state.canvasColor, outputProfile: state.outputProfile, frameRate: state.frameRate, snapEnabled: state.snapEnabled,
   });
 }
 function applySnapshot(s) {
@@ -181,7 +184,7 @@ function applySnapshot(s) {
   normalizeSelections();
 }
 function ensureSeqAboveExistingIds() {
-  const all = state.clips.concat(state.texts, state.overlays, state.brolls, state.audioTracks);
+  const all = state.clips.concat(state.texts, state.overlays, state.brolls, state.audioTracks, state.markers);
   seq = Math.max(seq, ...all.map((x) => Number(x.id) || 0), 0);
 }
 function normalizeSelections() {
@@ -191,6 +194,7 @@ function normalizeSelections() {
   if (!findOverlay(state.selectedOverlayId)) state.selectedOverlayId = state.overlays[0] ? state.overlays[0].id : null;
   if (!findBroll(state.selectedBrollId)) state.selectedBrollId = state.brolls[0] ? state.brolls[0].id : null;
   if (!findAudioTrack(state.selectedAudioTrackId)) state.selectedAudioTrackId = state.audioTracks[0] ? state.audioTracks[0].id : null;
+  if (!(state.markers || []).some((marker) => marker.id === state.selectedMarkerId)) state.selectedMarkerId = null;
 }
 function recordUndo() {
   if (accuratePreviewMode) accuratePreviewDirty = true;
@@ -236,12 +240,12 @@ const rawDur = timeline.rawDuration;
 const clipSpeed = timeline.speedOf;
 const effDur = timeline.effectiveDuration;
 
-function gapDur(i) {
-  const c = state.clips[i];
-  if (!c || i >= state.clips.length - 1) return 0;
+function gapDur(i, clips = state.clips) {
+  const c = clips[i];
+  if (!c || i >= clips.length - 1) return 0;
   const t = c.transitionToNext || {};
   if (!t.style || t.style === 'none' || t.style === 'cut') return 0;
-  const bound = Math.min(effDur(state.clips[i]), effDur(state.clips[i + 1])) / 2;
+  const bound = Math.min(effDur(clips[i]), effDur(clips[i + 1])) / 2;
   return Math.min(Number(t.duration) || 0, bound);
 }
 
@@ -274,11 +278,12 @@ const els = {
   status: $('status'), progressWrap: $('progressWrap'), progress: $('progress'),
   cancel: $('btnCancel'), reveal: $('btnReveal'),
   timelineViewport: $('timelineViewport'), timelineRuler: $('timelineRuler'), timelineTrack: $('timelineTrack'),
-  timelinePlayhead: $('timelinePlayhead'), timelineZoomOut: $('btnTimelineZoomOut'), timelineZoomIn: $('btnTimelineZoomIn'), timelineZoomLabel: $('timelineZoomLabel'),
+  timelinePlayhead: $('timelinePlayhead'), timelineSnapGuide: $('timelineSnapGuide'), timelineZoomOut: $('btnTimelineZoomOut'), timelineZoomIn: $('btnTimelineZoomIn'), timelineFit: $('btnTimelineFit'), timelineZoomLabel: $('timelineZoomLabel'),
+  toggleSnap: $('btnToggleSnap'), addMarker: $('btnAddMarker'), prevMarker: $('btnPrevMarker'), nextMarker: $('btnNextMarker'), deleteMarker: $('btnDeleteMarker'), markerName: $('markerName'), timelineTimecode: $('timelineTimecode'),
   videoTrackLane: $('videoTrackLane'), lockVideoTrack: $('btnLockVideoTrack'), brollTrackLane: $('brollTrackLane'), overlayTrackLane: $('overlayTrackLane'), textTrackLane: $('textTrackLane'), toggleBroll: $('btnToggleBroll'), lockBroll: $('btnLockBroll'), toggleOverlay: $('btnToggleOverlay'), lockOverlay: $('btnLockOverlay'), toggleText: $('btnToggleText'), lockText: $('btnLockText'), muteAudio: $('btnMuteAudio'), lockAudio: $('btnLockAudio'),
   clips: $('clips'), timelineEmpty: $('timelineEmpty'), timelineHint: $('timelineHint'),
   // clip inspector
-  clipEmpty: $('clipEmpty'), clipInspector: $('clipInspector'), clipTitle: $('clipTitle'),
+  clipEmpty: $('clipEmpty'), clipInspector: $('clipInspector'), clipTitle: $('clipTitle'), clipName: $('clipName'),
   splitClip: $('btnSplitClip'), duplicateClip: $('btnDuplicateClip'), freezeFrame: $('btnFreezeFrame'), freezeFrameDuration: $('freezeFrameDuration'), toggleClipMute: $('btnToggleClipMute'), copyClipAppearance: $('btnCopyClipAppearance'), pasteClipAppearance: $('btnPasteClipAppearance'),
   removeSilence: $('btnRemoveSilence'), detectBeats: $('btnDetectBeats'), detectScenes: $('btnDetectScenes'), stepBack: $('btnStepBack'), stepForward: $('btnStepForward'),
   trimStart: $('trimStart'), trimEnd: $('trimEnd'), trimStartVal: $('trimStartVal'), imageDurationField: $('imageDurationField'), imageDuration: $('imageDuration'),
@@ -464,7 +469,7 @@ function stopVoiceRecording() {
 }
 
 function hasEditableContent() {
-  return state.clips.length > 0 || state.texts.length > 0 || state.overlays.length > 0 || state.brolls.length > 0 || state.audioTracks.length > 0 || !!state.bgm;
+  return state.clips.length > 0 || state.texts.length > 0 || state.overlays.length > 0 || state.brolls.length > 0 || state.audioTracks.length > 0 || state.markers.length > 0 || !!state.bgm;
 }
 function scheduleRecovery() {
   if (!api.saveRecovery) return;
@@ -498,6 +503,7 @@ const findAudioTrack = (id) => state.audioTracks.find((track) => track.id === id
 let activeTimelineItem = { type: 'clip', id: null };
 function activateTimelineItem(type, id) {
   activeTimelineItem = { type, id };
+  state.selectedMarkerId = null;
   if (type === 'clip') state.selectedClipId = id;
   else if (type === 'text') state.selectedTextId = id;
   else if (type === 'overlay') { state.selectedOverlayId = id; state.selectedKeyframeTime = null; }
@@ -981,6 +987,7 @@ function applySpeedCurvePreset() {
   retimeItemsForSpeedCurve(state.overlays, start, oldDuration, oldEffective, oldSpeed, speeds, newEffective);
   retimeItemsForSpeedCurve(state.brolls, start, oldDuration, oldEffective, oldSpeed, speeds, newEffective);
   retimeItemsForSpeedCurve(state.audioTracks, start, oldDuration, oldEffective, oldSpeed, speeds, newEffective);
+  retimeMarkersForSpeedCurve(start, oldDuration, oldEffective, oldSpeed, speeds, newEffective);
   const delta = newEffective - oldEffective;
   const shiftFollowing = (items) => items.forEach((item) => {
     if (following.has(item)) { item.start += delta; item.end += delta; }
@@ -1024,9 +1031,15 @@ function ensureVideoTrackEditable() {
 }
 function deleteClip(id) {
   if (!ensureVideoTrackEditable()) return;
+  const index = state.clips.findIndex((clip) => clip.id === id);
+  if (index < 0) return;
   recordUndo();
   state.clips = state.clips.filter((c) => c.id !== id);
-  if (state.selectedClipId === id) state.selectedClipId = state.clips.length ? state.clips[0].id : null;
+  if (state.selectedClipId === id) {
+    const next = state.clips[Math.min(index, state.clips.length - 1)];
+    state.selectedClipId = next ? next.id : null;
+    activeTimelineItem = { type: 'clip', id: state.selectedClipId };
+  }
   stopPreview();
   renderAll();
 }
@@ -1090,15 +1103,12 @@ function reorderTo(id, targetId) {
 /** Split the selected clip at the source time currently under the preview head. */
 function splitSelectedClip() {
   if (!ensureVideoTrackEditable()) return;
-  const clip = findClip(state.selectedClipId);
+  const layout = timelineLayout();
+  const locatedOutput = timeline.locateTimelineTime(layout, playheadTime, state.selectedClipId);
+  const clip = locatedOutput ? locatedOutput.clip : findClip(state.selectedClipId);
   if (!clip) { setStatus('请先选择一个片段'); return; }
-  const selectedIndex = state.clips.findIndex((c) => c.id === clip.id);
-  const sequential = timeline.exportToPreviewTime(playheadTime, previewDuration(), totalDuration());
-  const located = timeline.locateSequentialTime(state.clips, sequential);
-  // A playhead inside a transition can map to a neighbouring source stream;
-  // retaining the selected source time is more predictable in that case.
-  const sourceTime = located && located.index === selectedIndex
-    ? clip.trimStart + located.local * clipSpeed(clip)
+  const sourceTime = locatedOutput
+    ? timeline.sourceTimeAtClipOutputOffset(clip, playheadTime - locatedOutput.start)
     : (clip.trimStart + clip.trimEnd) / 2;
   const splitAt = Math.max(clip.trimStart, Math.min(clip.trimEnd, sourceTime));
   if (!(splitAt > clip.trimStart + 0.05 && splitAt < clip.trimEnd - 0.05)) {
@@ -1116,6 +1126,40 @@ function splitSelectedClip() {
   stopPreview();
   renderAll();
   setStatus('已在 ' + splitAt.toFixed(2) + 's 分割片段');
+}
+
+function trimClipEdgeToPlayhead(edge) {
+  if (!ensureVideoTrackEditable()) return false;
+  const layout = timelineLayout();
+  const located = timeline.locateTimelineTime(layout, playheadTime, state.selectedClipId);
+  const clip = located ? located.clip : findClip(state.selectedClipId);
+  if (!clip || !located) { setStatus('播放头不在可裁剪片段内'); return false; }
+  const sourceAt = timeline.sourceTimeAtClipOutputOffset(clip, playheadTime - located.start);
+  const min = 0.05;
+  if (edge === 'start' && !(sourceAt > clip.trimStart + min && sourceAt < clip.trimEnd - min)) {
+    setStatus('播放位置太靠近片段边缘，无法设置入点');
+    return false;
+  }
+  if (edge === 'end' && !(sourceAt > clip.trimStart + min && sourceAt < clip.trimEnd - min)) {
+    setStatus('播放位置太靠近片段边缘，无法设置出点');
+    return false;
+  }
+  const index = state.clips.findIndex((item) => item.id === clip.id);
+  const oldNextStart = layout.items[index + 1] ? layout.items[index + 1].start : layout.total;
+  recordUndo();
+  if (edge === 'start') {
+    if (clip.reverse) clip.trimEnd = sourceAt;
+    else clip.trimStart = sourceAt;
+  } else if (clip.reverse) clip.trimStart = sourceAt;
+  else clip.trimEnd = sourceAt;
+  const updated = timelineLayout();
+  const nextStart = updated.items[index + 1] ? updated.items[index + 1].start : updated.total;
+  const rippleDelta = nextStart - oldNextStart;
+  if (Math.abs(rippleDelta) > 0.000001) rippleShiftAfter(oldNextStart, rippleDelta);
+  stopPreview();
+  setStatus(edge === 'start' ? '已将片段入点设为播放头位置' : '已将片段出点设为播放头位置');
+  renderAll();
+  return true;
 }
 
 function duplicateSelectedClip() {
@@ -1212,12 +1256,48 @@ async function createFreezeFrameAtPlayhead() {
   }
 }
 
-function rippleShiftAfter(time, delta) {
+function rippleShiftAfter(time, delta, shiftMarkers = true) {
   const shift = (items) => items.forEach((item) => {
     if (item.start >= time) { item.start += delta; item.end += delta; }
     else if (item.end > time) item.end += delta;
   });
   shift(state.texts); shift(state.overlays); shift(state.brolls); shift(state.audioTracks);
+  if (shiftMarkers) rippleMarkersAfter(time, delta);
+}
+
+function rippleMarkersOverRemovedRanges(removed) {
+  for (const marker of state.markers || []) marker.time = timeline.rippleTime(marker.time, removed);
+}
+
+function insertMainClipsAtPlayhead(clips, statusPrefix) {
+  const valid = Array.isArray(clips) ? clips.filter(Boolean) : [];
+  if (!valid.length) return false;
+  const layout = timelineLayout();
+  let index = state.clips.length;
+  let at = totalDuration();
+  let split = null;
+  const target = timeline.locateTimelineTime(layout, playheadTime, state.selectedClipId);
+  if (target && playheadTime > target.start + 0.05 && playheadTime < target.end - 0.05) {
+    const sourceAt = timeline.sourceTimeAtClipOutputOffset(target.clip, playheadTime - target.start);
+    split = timeline.splitClipAtSourceTime(target.clip, sourceAt, ++seq);
+    if (split) { index = target.index + 1; at = playheadTime; }
+  }
+  if (!split) {
+    for (const item of layout.items) {
+      if (playheadTime <= item.start + 0.05) { index = item.index; at = item.start; break; }
+    }
+  }
+  const insertedDuration = valid.reduce((sum, clip) => sum + effDur(clip), 0);
+  recordUndo();
+  if (split) state.clips.splice(index - 1, 1, split.left, ...valid, split.right);
+  else state.clips.splice(index, 0, ...valid);
+  rippleShiftAfter(at, insertedDuration);
+  state.selectedClipId = valid[0].id;
+  activeTimelineItem = { type: 'clip', id: valid[0].id };
+  stopPreview();
+  setStatus((statusPrefix || '已在播放头插入') + valid.length + ' 段视频，并波纹后移后续内容');
+  renderAll();
+  return true;
 }
 
 async function insertClipAtSelection() {
@@ -1226,15 +1306,7 @@ async function insertClipAtSelection() {
   if (res.canceled || !res.items.length) return;
   const valid = res.items.filter((item) => !item.error).map(makeClip);
   if (!valid.length) { setStatus('没有可插入的视频素材'); return; }
-  const index = Math.max(0, state.clips.findIndex((clip) => clip.id === state.selectedClipId));
-  const at = index < state.clips.length ? clipStartOnTimeline(state.clips[index].id) : totalDuration();
-  const insertedDuration = valid.reduce((sum, clip) => sum + effDur(clip), 0);
-  recordUndo();
-  state.clips.splice(index, 0, ...valid);
-  rippleShiftAfter(at, insertedDuration);
-  state.selectedClipId = valid[0].id;
-  setStatus(`已插入 ${valid.length} 段视频，并波纹后移后续内容`);
-  renderAll();
+  insertMainClipsAtPlayhead(valid);
 }
 
 async function overwriteSelectedClip() {
@@ -1261,11 +1333,16 @@ function rippleDeleteSelectedClip() {
   const target = findClip(state.selectedClipId);
   if (!target) { setStatus('请先选择要波纹删除的主视频片段'); return; }
   const at = clipStartOnTimeline(target.id);
-  const duration = effDur(target) - gapDur(state.clips.findIndex((clip) => clip.id === target.id));
+  const index = state.clips.findIndex((clip) => clip.id === target.id);
+  const duration = effDur(target) - gapDur(index);
   recordUndo();
   state.clips = state.clips.filter((clip) => clip.id !== target.id);
-  rippleShiftAfter(at + Math.max(0, duration), -Math.max(0, duration));
-  state.selectedClipId = state.clips[Math.min(state.clips.length - 1, 0)] ? state.clips[Math.min(state.clips.length - 1, 0)].id : null;
+  const removedDuration = Math.max(0, duration);
+  rippleShiftAfter(at + removedDuration, -removedDuration, false);
+  rippleMarkersOverRemovedRanges([{ start: at, end: at + removedDuration }]);
+  const next = state.clips[Math.min(index, state.clips.length - 1)];
+  state.selectedClipId = next ? next.id : null;
+  activeTimelineItem = { type: 'clip', id: state.selectedClipId };
   setStatus('已波纹删除主视频片段');
   renderAll();
 }
@@ -1302,10 +1379,29 @@ function toggleSelectedClipMute() {
 
 function stepPreviewFrame(direction) {
   if (!state.clips.length) return;
-  const fps = 30;
+  const fps = Math.max(1, Number(state.frameRate) || 30);
   const target = Math.max(0, Math.min(totalDuration(), playheadTime + direction / fps));
   stopPreview();
   seekTimelineTime(target, false);
+}
+
+function nudgePlayhead(delta) {
+  if (!state.clips.length) return false;
+  stopPreview();
+  const next = Math.max(0, Math.min(totalDuration(), playheadTime + delta));
+  seekTimelineTime(next, false);
+  revealTimelineTime(next);
+  return true;
+}
+
+function jumpEditPoint(direction) {
+  if (!state.clips.length) return false;
+  const point = timeline.adjacentEditPoint(timelineLayout(), playheadTime, direction);
+  if (point == null) return false;
+  stopPreview();
+  seekTimelineTime(point, false);
+  revealTimelineTime(point);
+  return true;
 }
 
 function jklPlayback(key) {
@@ -1328,6 +1424,13 @@ function jklPlayback(key) {
 }
 
 function copyActiveTimelineItem() {
+  if (activeTimelineItem.type === 'clip') {
+    const clip = findClip(state.selectedClipId);
+    if (!clip) { setStatus('请先选择一个主视频片段'); return false; }
+    clipboardTimelineItem = { type: 'clip', item: JSON.parse(JSON.stringify(clip)) };
+    setStatus('已复制选中主视频片段');
+    return true;
+  }
   const item = activeTimedItem();
   if (!item) { setStatus('请先选择文字、视频层、叠加或独立音频'); return false; }
   clipboardTimelineItem = { type: activeTimelineItem.type, item: JSON.parse(JSON.stringify(item)) };
@@ -1338,6 +1441,12 @@ function copyActiveTimelineItem() {
 function pasteTimelineItem() {
   if (!clipboardTimelineItem) { setStatus('剪贴板中没有可粘贴的时间线素材'); return false; }
   const copy = JSON.parse(JSON.stringify(clipboardTimelineItem.item));
+  if (clipboardTimelineItem.type === 'clip') {
+    if (!ensureVideoTrackEditable()) return false;
+    copy.id = ++seq;
+    copy.name = (copy.name || '片段') + ' · 副本';
+    return insertMainClipsAtPlayhead([copy], '已在播放头粘贴 ');
+  }
   const duration = Math.max(0.05, copy.end - copy.start);
   copy.id = ++seq; copy.start = playheadTime; copy.end = playheadTime + duration;
   recordUndo();
@@ -1415,6 +1524,7 @@ async function removeSilenceFromSelectedClip() {
       item.end = Math.max(item.start + 0.05, timeline.rippleTime(item.end, removed));
     });
     rippleItems(state.texts); rippleItems(state.overlays); rippleItems(state.brolls); rippleItems(state.audioTracks);
+    rippleMarkersOverRemovedRanges(removed);
     state.selectedClipId = pieces[0].id;
     setStatus(`已删除 ${local.length} 段静音，保留 ${pieces.length} 段画面`);
     renderAll();
@@ -1550,6 +1660,8 @@ function renderCanvas() {
 }
 
 let draggingId = null;
+let clipTrimEdit = null;
+let inspectorTrimEdit = null;
 let playheadTime = 0;
 let pixelsPerSecond = 80;
 const MIN_PIXELS_PER_SECOND = 24;
@@ -1557,12 +1669,105 @@ const MAX_PIXELS_PER_SECOND = 320;
 const TIMELINE_LABEL_WIDTH = 46;
 let beatMarkers = [];
 
-function timelineLayout() {
-  return timeline.layoutClips(state.clips, state.clips.map((_clip, index) => gapDur(index)));
+function timelineLayout(clips = state.clips) {
+  return timeline.layoutClips(clips, clips.map((_clip, index) => gapDur(index, clips)));
 }
 
 function timelineContentWidth(total) {
   return Math.max(els.timelineViewport ? els.timelineViewport.clientWidth : 0, Math.ceil(TIMELINE_LABEL_WIDTH + total * pixelsPerSecond + 40), 360);
+}
+
+function orderedMarkers() {
+  return timeline.sortedMarkers ? timeline.sortedMarkers(state.markers) : (state.markers || []).slice().sort((a, b) => a.time - b.time);
+}
+
+function markerAtPlayhead() {
+  const threshold = Math.max(0.02, 6 / pixelsPerSecond);
+  return orderedMarkers().find((marker) => Math.abs(marker.time - playheadTime) <= threshold) || null;
+}
+
+function addMarkerAtPlayhead() {
+  if (!state.clips.length) { setStatus('请先导入视频'); return false; }
+  const existing = markerAtPlayhead();
+  if (existing) {
+    state.selectedMarkerId = existing.id;
+    seekTimelineTime(existing.time, false);
+    renderTimeline();
+    setStatus('播放头位置已有标记');
+    return true;
+  }
+  recordUndo();
+  const marker = { id: ++seq, time: Math.round(playheadTime * 1000) / 1000, name: '' };
+  state.markers.push(marker);
+  state.selectedMarkerId = marker.id;
+  renderTimeline();
+  setStatus('已在 ' + marker.time.toFixed(2) + 's 添加标记');
+  return true;
+}
+
+function deleteSelectedMarker() {
+  const marker = orderedMarkers().find((item) => item.id === state.selectedMarkerId);
+  if (!marker) { setStatus('请先选择一个标记'); return false; }
+  recordUndo();
+  state.markers = state.markers.filter((item) => item.id !== marker.id);
+  state.selectedMarkerId = null;
+  renderTimeline();
+  setStatus('已删除标记');
+  return true;
+}
+
+function selectedMarker() {
+  return orderedMarkers().find((marker) => marker.id === state.selectedMarkerId) || null;
+}
+
+let markerNameSnapshot = null;
+function renderMarkerControls() {
+  const marker = selectedMarker();
+  els.markerName.disabled = !marker;
+  els.markerName.value = marker ? (marker.name || '') : '';
+}
+function commitMarkerName() {
+  if (markerNameSnapshot != null && markerNameSnapshot !== snapshot()) {
+    undoStack.push(markerNameSnapshot);
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+    scheduleRecovery();
+    updateHistoryButtons();
+  }
+  markerNameSnapshot = null;
+}
+
+function jumpMarker(direction) {
+  if (!state.clips.length) return false;
+  const marker = timeline.adjacentMarker
+    ? timeline.adjacentMarker(state.markers, playheadTime, direction)
+    : null;
+  if (!marker) {
+    setStatus(direction < 0 ? '播放头之前没有标记' : '播放头之后没有标记');
+    return false;
+  }
+  state.selectedMarkerId = marker.id;
+  stopPreview();
+  seekTimelineTime(marker.time, false);
+  revealTimelineTime(marker.time);
+  renderTimeline();
+  return true;
+}
+
+function retimeMarkersForSpeedCurve(originalStart, sourceDuration, oldEffectiveDuration, oldSpeed, speeds, newEffectiveDuration) {
+  for (const marker of state.markers || []) {
+    if (marker.time > originalStart && marker.time < originalStart + oldEffectiveDuration) {
+      marker.time = timeline.mapSpeedCurveTimelineTime(marker.time, originalStart, sourceDuration, oldSpeed, speeds);
+    } else if (marker.time >= originalStart + oldEffectiveDuration) {
+      marker.time += newEffectiveDuration - oldEffectiveDuration;
+    }
+  }
+}
+
+function rippleMarkersAfter(time, delta) {
+  for (const marker of state.markers || []) {
+    if (marker.time >= time) marker.time = Math.max(0, marker.time + delta);
+  }
 }
 
 function formatTimelineTime(seconds) {
@@ -1577,6 +1782,42 @@ function syncTimelinePlayhead() {
   playheadTime = Math.max(0, Math.min(total, playheadTime));
   els.timelinePlayhead.classList.toggle('hidden', !state.clips.length);
   els.timelinePlayhead.style.left = String(TIMELINE_LABEL_WIDTH + playheadTime * pixelsPerSecond) + 'px';
+  if (document.activeElement !== els.timelineTimecode) els.timelineTimecode.value = timeline.formatTimecode(playheadTime);
+  followTimelinePlayhead();
+}
+
+function followTimelinePlayhead() {
+  if (!playing || draggingPlayhead || clipTrimEdit || timedEdit) return;
+  const viewport = els.timelineViewport;
+  const width = Number(viewport && viewport.clientWidth) || 0;
+  if (width <= 0) return;
+  const x = TIMELINE_LABEL_WIDTH + playheadTime * pixelsPerSecond;
+  const scroll = Number(viewport.scrollLeft) || 0;
+  const padding = Math.min(80, Math.max(36, width * 0.12));
+  if (x >= scroll + padding && x <= scroll + width - padding) return;
+  viewport.scrollLeft = Math.max(0, x - width * 0.35);
+}
+
+function revealTimelineTime(seconds) {
+  const viewport = els.timelineViewport;
+  const width = Number(viewport && viewport.clientWidth) || 0;
+  if (width <= 0) return;
+  const x = TIMELINE_LABEL_WIDTH + Math.max(0, Number(seconds) || 0) * pixelsPerSecond;
+  const scroll = Number(viewport.scrollLeft) || 0;
+  const padding = Math.min(70, Math.max(28, width * 0.1));
+  if (x >= scroll + padding && x <= scroll + width - padding) return;
+  viewport.scrollLeft = Math.max(0, x - width * 0.4);
+}
+
+function showTimelineSnapGuide(time) {
+  const at = Number(time);
+  if (!Number.isFinite(at)) { hideTimelineSnapGuide(); return; }
+  els.timelineSnapGuide.classList.remove('hidden');
+  els.timelineSnapGuide.style.left = String(TIMELINE_LABEL_WIDTH + at * pixelsPerSecond) + 'px';
+}
+
+function hideTimelineSnapGuide() {
+  els.timelineSnapGuide.classList.add('hidden');
 }
 
 function renderTimelineRuler(total, width) {
@@ -1595,7 +1836,35 @@ function renderTimelineRuler(total, width) {
     }
     ruler.appendChild(tick);
   });
+  for (const beat of beatMarkers) {
+    if (!(beat >= 0 && beat <= total)) continue;
+    const marker = document.createElement('i');
+    marker.className = 'ruler-beat';
+    marker.style.left = String(TIMELINE_LABEL_WIDTH + beat * pixelsPerSecond) + 'px';
+    marker.title = '节拍 ' + beat.toFixed(2) + 's';
+    ruler.appendChild(marker);
+  }
   return data.step;
+}
+
+function renderTimelineMarkers() {
+  document.querySelectorAll('.timeline-marker').forEach((node) => node.remove());
+  for (const marker of orderedMarkers()) {
+    if (marker.time < 0 || marker.time > totalDuration() + 0.001) continue;
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'timeline-marker' + (marker.id === state.selectedMarkerId ? ' selected' : '');
+    node.style.left = String(TIMELINE_LABEL_WIDTH + marker.time * pixelsPerSecond) + 'px';
+    node.title = i18n.t('标记') + ' ' + marker.time.toFixed(2) + 's' + (marker.name ? ' · ' + marker.name : '');
+    node.setAttribute('aria-label', node.title);
+    node.addEventListener('click', (event) => {
+      event.stopPropagation();
+      state.selectedMarkerId = marker.id;
+      seekTimelineTime(marker.time, false);
+      renderTimeline();
+    });
+    els.timelineTrack.appendChild(node);
+  }
 }
 
 function timelineTimeFromPointer(event) {
@@ -1607,28 +1876,148 @@ function timelineTimeFromPointer(event) {
 let draggingPlayhead = false;
 function handleTimelinePointer(event) {
   if (!state.clips.length) return;
-  if (event.target.closest && event.target.closest('.card')) return;
+  if (event.target.closest && event.target.closest('.card, .timeline-marker')) return;
   draggingPlayhead = true;
   seekTimelineTime(timelineTimeFromPointer(event), false);
 }
 function handleTimelinePointerMove(event) {
+  if (clipTrimEdit) { applyClipTrimEdit(event); return; }
   if (timedEdit) { applyTimedEdit(event); return; }
   if (!draggingPlayhead) return;
   seekTimelineTime(timelineTimeFromPointer(event), false);
 }
 function stopTimelinePointer() {
+  if (clipTrimEdit) { commitClipTrimEdit(); return; }
   if (timedEdit) { commitTimedEdit(); return; }
   draggingPlayhead = false;
 }
 
-function changeTimelineZoom(multiplier) {
+function beginClipTrimEdit(event, clip, edge) {
+  if (!ensureVideoTrackEditable()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  activateTimelineItem('clip', clip.id);
+  const layout = timelineLayout();
+  const index = state.clips.findIndex((item) => item.id === clip.id);
+  clipTrimEdit = {
+    id: clip.id, edge, originX: event.clientX, snapshot: snapshot(),
+    trimStart: clip.trimStart, trimEnd: clip.trimEnd,
+    start: layout.items[index] ? layout.items[index].start : 0,
+    end: layout.items[index] ? layout.items[index].end : effDur(clip),
+    nextStart: layout.items[index + 1] ? layout.items[index + 1].start : layout.total,
+  };
+  document.body.classList.add('timeline-editing');
+}
+
+function applyClipTrimEdit(event) {
+  if (!clipTrimEdit) return;
+  const clip = findClip(clipTrimEdit.id);
+  if (!clip) return;
+  const delta = (event.clientX - clipTrimEdit.originX) / pixelsPerSecond;
+  const base = Object.assign({}, clip, { trimStart: clipTrimEdit.trimStart, trimEnd: clipTrimEdit.trimEnd });
+  let trimmed = timeline.trimClipByOutputDelta(base, clipTrimEdit.edge, delta);
+  if (!trimmed) return;
+  const proposed = Object.assign({}, clip, trimmed);
+  const proposedClips = state.clips.map((item) => item.id === clip.id ? proposed : item);
+  const layout = timelineLayout(proposedClips);
+  const index = state.clips.findIndex((item) => item.id === clip.id);
+  const ranged = layout.items[index];
+  const edgeTime = clipTrimEdit.edge === 'start' ? ranged.start : ranged.end;
+  const guides = timelineSnapGuides('clip', clip.id);
+  const threshold = Math.max(0.04, 9 / pixelsPerSecond);
+  const snappedTime = timeline.snapTime(edgeTime, guides, threshold);
+  const effectiveSnap = state.snapEnabled ? snappedTime : edgeTime;
+  showTimelineSnapGuide(effectiveSnap !== edgeTime ? effectiveSnap : null);
+  if (effectiveSnap !== edgeTime) {
+    const snappedDelta = clipTrimEdit.edge === 'start'
+      ? effectiveSnap - clipTrimEdit.start
+      : effectiveSnap - clipTrimEdit.end;
+    trimmed = timeline.trimClipByOutputDelta(base, clipTrimEdit.edge, snappedDelta);
+  }
+  clip.trimStart = trimmed.trimStart;
+  clip.trimEnd = trimmed.trimEnd;
+  renderAll();
+}
+
+function commitClipTrimEdit() {
+  if (!clipTrimEdit) return;
+  const index = state.clips.findIndex((item) => item.id === clipTrimEdit.id);
+  const layout = timelineLayout();
+  const nextStart = layout.items[index + 1] ? layout.items[index + 1].start : layout.total;
+  const rippleDelta = nextStart - clipTrimEdit.nextStart;
+  if (Math.abs(rippleDelta) > 0.000001) rippleShiftAfter(clipTrimEdit.nextStart, rippleDelta);
+  const changed = clipTrimEdit.snapshot !== snapshot();
+  if (changed) {
+    if (accuratePreviewMode) accuratePreviewDirty = true;
+    undoStack.push(clipTrimEdit.snapshot);
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+    scheduleRecovery();
+    setStatus('已裁剪片段');
+  }
+  clipTrimEdit = null;
+  hideTimelineSnapGuide();
+  document.body.classList.remove('timeline-editing');
+  if (changed) renderAll();
+  else updateHistoryButtons();
+}
+
+function beginInspectorTrimEdit() {
+  const clip = findClip(state.selectedClipId);
+  if (!clip || (inspectorTrimEdit && inspectorTrimEdit.id === clip.id)) return;
+  const layout = timelineLayout();
+  const index = state.clips.findIndex((item) => item.id === clip.id);
+  inspectorTrimEdit = {
+    id: clip.id, snapshot: snapshot(),
+    nextStart: layout.items[index + 1] ? layout.items[index + 1].start : layout.total,
+  };
+}
+
+function commitInspectorTrimEdit() {
+  const edit = inspectorTrimEdit;
+  inspectorTrimEdit = null;
+  if (!edit) return;
+  const index = state.clips.findIndex((item) => item.id === edit.id);
+  const layout = timelineLayout();
+  const nextStart = layout.items[index + 1] ? layout.items[index + 1].start : layout.total;
+  const rippleDelta = nextStart - edit.nextStart;
+  if (Math.abs(rippleDelta) > 0.000001) rippleShiftAfter(edit.nextStart, rippleDelta);
+  const changed = edit.snapshot !== snapshot();
+  if (changed) {
+    if (accuratePreviewMode) accuratePreviewDirty = true;
+    undoStack.push(edit.snapshot);
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+    scheduleRecovery();
+    setStatus('已裁剪片段');
+  }
+  renderAll();
+}
+
+function changeTimelineZoom(multiplier, anchorClientX) {
   const old = pixelsPerSecond;
   pixelsPerSecond = Math.max(MIN_PIXELS_PER_SECOND, Math.min(MAX_PIXELS_PER_SECOND, Math.round(old * multiplier)));
   if (pixelsPerSecond === old) return;
   const previousScroll = els.timelineViewport.scrollLeft;
-  const anchor = previousScroll / old;
+  const viewportRect = els.timelineViewport.getBoundingClientRect ? els.timelineViewport.getBoundingClientRect() : { left: 0 };
+  const pointerOffset = Number.isFinite(anchorClientX) ? Math.max(0, anchorClientX - viewportRect.left) : 0;
+  const anchor = (previousScroll + pointerOffset) / old;
   renderTimeline();
-  els.timelineViewport.scrollLeft = anchor * pixelsPerSecond;
+  els.timelineViewport.scrollLeft = Math.max(0, anchor * pixelsPerSecond - pointerOffset);
+}
+
+function handleTimelineWheel(event) {
+  if (!(event.ctrlKey || event.metaKey)) return;
+  event.preventDefault();
+  changeTimelineZoom(event.deltaY < 0 ? 1.15 : 1 / 1.15, event.clientX);
+}
+
+function fitTimeline() {
+  if (!state.clips.length) return;
+  const available = Math.max(1, (els.timelineViewport.clientWidth || 0) - TIMELINE_LABEL_WIDTH - 40);
+  pixelsPerSecond = Math.max(MIN_PIXELS_PER_SECOND, Math.min(MAX_PIXELS_PER_SECOND, Math.floor(available / Math.max(0.1, totalDuration()))));
+  renderTimeline();
+  els.timelineViewport.scrollLeft = 0;
 }
 
 let timedEdit = null;
@@ -1647,7 +2036,12 @@ function beginTimedEdit(event, type, item, edge) {
   document.body.classList.add('timeline-editing');
 }
 function timelineSnapGuides(excludeType, excludeId) {
-  const guides = [0, playheadTime, totalDuration()].concat(beatMarkers);
+  const guides = [0, playheadTime, totalDuration()].concat(beatMarkers, orderedMarkers().map((marker) => marker.time));
+  const layout = timelineLayout();
+  layout.items.forEach(({ clip, start, end }) => {
+    if (excludeType === 'clip' && clip.id === excludeId) return;
+    guides.push(start, end);
+  });
   const add = (items, type) => {
     for (const item of items || []) {
       if (type === excludeType && item.id === excludeId) continue;
@@ -1660,6 +2054,7 @@ function timelineSnapGuides(excludeType, excludeId) {
   return guides;
 }
 function snapTimedRange(range, edge, type, id) {
+  if (!state.snapEnabled) return range;
   const guides = timelineSnapGuides(type, id);
   const threshold = Math.max(0.04, 9 / pixelsPerSecond);
   if (edge === 'move') {
@@ -1679,6 +2074,9 @@ function applyTimedEdit(event) {
   if (timedEdit.edge === 'move') range = timeline.moveTimedRange(source, delta);
   else range = timeline.resizeTimedRange(source, timedEdit.edge, delta);
   range = snapTimedRange(range, timedEdit.edge, timedEdit.type, timedEdit.id);
+  const rawEdge = timedEdit.edge === 'move' ? source.start + delta : (timedEdit.edge === 'start' ? source.start + delta : source.end + delta);
+  const snappedEdge = timedEdit.edge === 'move' ? range.start : (timedEdit.edge === 'start' ? range.start : range.end);
+  showTimelineSnapGuide(Math.abs(rawEdge - snappedEdge) > 0.000001 ? snappedEdge : null);
   if (!(range.end > range.start + 0.04)) return;
   item.start = range.start;
   item.end = range.end;
@@ -1694,6 +2092,7 @@ function commitTimedEdit() {
     scheduleRecovery();
   }
   timedEdit = null;
+  hideTimelineSnapGuide();
   document.body.classList.remove('timeline-editing');
   updateHistoryButtons();
 }
@@ -1747,6 +2146,13 @@ function renderTimeline() {
     els.timelineHint.textContent = '';
     els.timelineRuler.innerHTML = '';
     els.timelineTrack.style.width = '100%';
+    renderTimelineMarkers();
+    els.addMarker.disabled = true;
+    els.prevMarker.disabled = true;
+    els.nextMarker.disabled = true;
+    els.deleteMarker.disabled = true;
+    els.timelineFit.disabled = true;
+    renderMarkerControls();
     syncTimelinePlayhead();
     return;
   }
@@ -1754,7 +2160,7 @@ function renderTimeline() {
   const width = timelineContentWidth(layout.total);
   els.timelineTrack.style.width = String(width) + 'px';
   const step = renderTimelineRuler(layout.total, width);
-  els.timelineHint.textContent = '点击定位 · 拖动播放头 · Ctrl/⌘+B 分割 · 网格 ' + step + 's';
+  els.timelineHint.textContent = '点击定位 · 拖动播放头 · M 标记 · Ctrl/⌘+B 分割 · 网格 ' + step + 's';
   els.timelineZoomLabel.textContent = Math.round(pixelsPerSecond / 80 * 100) + '%';
 
   layout.items.forEach(({ clip, index: idx, start, duration }) => {
@@ -1770,6 +2176,15 @@ function renderTimeline() {
     card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop-target'); });
     card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
     card.addEventListener('drop', (e) => { e.preventDefault(); card.classList.remove('drop-target'); if (draggingId != null) reorderTo(draggingId, clip.id); });
+    const trimStart = document.createElement('span');
+    trimStart.className = 'clip-trim-handle start';
+    trimStart.title = '拖动裁剪片段起点';
+    trimStart.addEventListener('pointerdown', (event) => beginClipTrimEdit(event, clip, 'start'));
+    const trimEnd = document.createElement('span');
+    trimEnd.className = 'clip-trim-handle end';
+    trimEnd.title = '拖动裁剪片段终点';
+    trimEnd.addEventListener('pointerdown', (event) => beginClipTrimEdit(event, clip, 'end'));
+    card.append(trimStart, trimEnd);
 
     const top = document.createElement('div');
     top.className = 'card-top';
@@ -1808,6 +2223,12 @@ function renderTimeline() {
     dur.textContent = `${rawDur(clip).toFixed(1)}s → ${effDur(clip).toFixed(1)}s`;
     card.appendChild(dur);
 
+    const name = document.createElement('div');
+    name.className = 'card-name';
+    name.textContent = clip.name || '片段';
+    name.title = clip.name || '片段';
+    card.appendChild(name);
+
     const actions = document.createElement('div');
     actions.className = 'card-actions';
     actions.appendChild(iconBtn('←', (e) => { e.stopPropagation(); moveClip(clip.id, -1); }));
@@ -1819,6 +2240,16 @@ function renderTimeline() {
 
     box.appendChild(card);
   });
+  renderTimelineMarkers();
+  els.addMarker.disabled = false;
+  els.toggleSnap.classList.toggle('is-active', state.snapEnabled !== false);
+  els.toggleSnap.textContent = state.snapEnabled !== false ? '🧲 磁吸' : '○ 磁吸';
+  els.toggleSnap.title = state.snapEnabled !== false ? '关闭时间线磁吸' : '开启时间线磁吸';
+  els.timelineFit.disabled = false;
+  els.prevMarker.disabled = !timeline.adjacentMarker || !timeline.adjacentMarker(state.markers, playheadTime, -1);
+  els.nextMarker.disabled = !timeline.adjacentMarker || !timeline.adjacentMarker(state.markers, playheadTime, 1);
+  els.deleteMarker.disabled = !orderedMarkers().some((marker) => marker.id === state.selectedMarkerId);
+  renderMarkerControls();
   syncTimelinePlayhead();
 }
 
@@ -1838,6 +2269,7 @@ function renderClipInspector() {
   if (!clip) return;
 
   els.clipTitle.textContent = clip.name;
+  els.clipName.value = clip.name || '';
   els.trimStart.max = String(clip.sourceDuration);
   els.trimEnd.max = String(clip.sourceDuration);
   els.trimStart.value = String(clip.trimStart);
@@ -2966,6 +3398,31 @@ els.export.addEventListener('click', doExport);
 els.renderPreview.addEventListener('click', renderAccuratePreview);
 els.timelineZoomOut.addEventListener('click', () => changeTimelineZoom(1 / 1.25));
 els.timelineZoomIn.addEventListener('click', () => changeTimelineZoom(1.25));
+els.timelineFit.addEventListener('click', fitTimeline);
+els.toggleSnap.addEventListener('click', () => { recordUndo(); state.snapEnabled = !state.snapEnabled; hideTimelineSnapGuide(); renderTimeline(); });
+els.timelineViewport.addEventListener('wheel', handleTimelineWheel, { passive: false });
+els.addMarker.addEventListener('click', addMarkerAtPlayhead);
+els.prevMarker.addEventListener('click', () => jumpMarker(-1));
+els.nextMarker.addEventListener('click', () => jumpMarker(1));
+els.deleteMarker.addEventListener('click', deleteSelectedMarker);
+els.markerName.addEventListener('focus', () => { markerNameSnapshot = snapshot(); });
+els.markerName.addEventListener('input', () => {
+  const marker = selectedMarker();
+  if (!marker) return;
+  marker.name = els.markerName.value.slice(0, 120);
+  renderTimelineMarkers();
+});
+els.markerName.addEventListener('change', commitMarkerName);
+els.markerName.addEventListener('blur', commitMarkerName);
+els.timelineTimecode.addEventListener('change', () => {
+  const time = timeline.parseTimecode(els.timelineTimecode.value);
+  if (time == null) { els.timelineTimecode.value = timeline.formatTimecode(playheadTime); setStatus('时间码格式无效'); return; }
+  stopPreview();
+  seekTimelineTime(Math.min(totalDuration(), time), false);
+});
+els.timelineTimecode.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') { event.preventDefault(); els.timelineTimecode.dispatchEvent(new Event('change')); els.timelineTimecode.blur(); }
+});
 els.timelineTrack.addEventListener('pointerdown', handleTimelinePointer);
 document.addEventListener('pointermove', handleTimelinePointerMove);
 document.addEventListener('pointerup', stopTimelinePointer);
@@ -2990,9 +3447,30 @@ els.stepForward.addEventListener('click', () => stepPreviewFrame(1));
 
 // clip inspector
 function withClip(fn) { const c = findClip(state.selectedClipId); if (c) { fn(c); } }
+let clipNameSnapshot = null;
+function commitClipName() {
+  if (clipNameSnapshot != null && clipNameSnapshot !== snapshot()) {
+    undoStack.push(clipNameSnapshot);
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+    scheduleRecovery();
+    updateHistoryButtons();
+  }
+  clipNameSnapshot = null;
+}
+els.clipName.addEventListener('focus', () => { clipNameSnapshot = snapshot(); });
+els.clipName.addEventListener('input', () => withClip((clip) => {
+  clip.name = els.clipName.value.slice(0, 160);
+  els.clipTitle.textContent = clip.name || '片段';
+  renderTimeline();
+}));
+els.clipName.addEventListener('change', commitClipName);
+els.clipName.addEventListener('blur', commitClipName);
 function trimInput(which) {
   const el = which === 'start' ? els.trimStart : els.trimEnd;
-  el.addEventListener('pointerdown', beginInteractiveEdit);
+  el.addEventListener('pointerdown', beginInspectorTrimEdit);
+  el.addEventListener('focus', beginInspectorTrimEdit);
+  el.addEventListener('keydown', beginInspectorTrimEdit);
   el.addEventListener('input', () => withClip((c) => {
     const value = parseFloat(el.value);
     if (which === 'start') c.trimStart = Math.max(0, Math.min(value, c.trimEnd - 0.1));
@@ -3000,13 +3478,15 @@ function trimInput(which) {
     els.trimStartVal.textContent = `${c.trimStart.toFixed(1)}s`;
     els.trimEndVal.textContent = `${c.trimEnd.toFixed(1)}s`;
     els.trimDurationVal.textContent = `保留 ${rawDur(c).toFixed(1)}s · 成片占用 ${effDur(c).toFixed(1)}s`;
+    renderTimeline();
     if (!playing && c.id === state.selectedClipId) {
       if (els.player.src !== c.url) els.player.src = c.url;
       try { els.player.currentTime = which === 'start' ? c.trimStart : Math.max(c.trimStart, c.trimEnd - 0.05); } catch {}
     }
     els.timeLabel.textContent = `0.0 / ${totalDuration().toFixed(1)}s`;
   }));
-  el.addEventListener('change', () => { commitInteractiveEdit(); renderTimeline(); });
+  el.addEventListener('change', commitInspectorTrimEdit);
+  el.addEventListener('blur', commitInspectorTrimEdit);
 }
 trimInput('start');
 trimInput('end');
@@ -3418,11 +3898,23 @@ document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   const nudge = e.shiftKey ? 1 : 0.1;
   if (e.code === 'Space' && !exporting) { e.preventDefault(); playPreview(); }
+  else if (!mod && e.key.toLowerCase() === 'm' && addMarkerAtPlayhead()) { e.preventDefault(); }
+  else if (!mod && e.key === '[' && jumpMarker(-1)) { e.preventDefault(); }
+  else if (!mod && e.key === ']' && jumpMarker(1)) { e.preventDefault(); }
+  else if (!mod && e.key === 'PageUp' && jumpEditPoint(-1)) { e.preventDefault(); }
+  else if (!mod && e.key === 'PageDown' && jumpEditPoint(1)) { e.preventDefault(); }
+  else if (!mod && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); fitTimeline(); }
+  else if (!mod && e.key === 'Home') { e.preventDefault(); stopPreview(); seekTimelineTime(0, false); }
+  else if (!mod && e.key === 'End') { e.preventDefault(); stopPreview(); seekTimelineTime(totalDuration(), false); }
   else if (e.key.toLowerCase() === 'j' && jklPlayback('j')) { e.preventDefault(); }
   else if (e.key.toLowerCase() === 'k' && jklPlayback('k')) { e.preventDefault(); }
   else if (e.key.toLowerCase() === 'l' && jklPlayback('l')) { e.preventDefault(); }
   else if (e.key === ',' || e.key === '<') { e.preventDefault(); stepPreviewFrame(-1); }
   else if (e.key === '.' || e.key === '>') { e.preventDefault(); stepPreviewFrame(1); }
+  else if (!mod && e.key.toLowerCase() === 'i' && trimClipEdgeToPlayhead('start')) { e.preventDefault(); }
+  else if (!mod && e.key.toLowerCase() === 'o' && trimClipEdgeToPlayhead('end')) { e.preventDefault(); }
+  else if (e.altKey && e.key === 'ArrowLeft' && state.selectedClipId) { e.preventDefault(); moveClip(state.selectedClipId, -1); }
+  else if (e.altKey && e.key === 'ArrowRight' && state.selectedClipId) { e.preventDefault(); moveClip(state.selectedClipId, 1); }
   else if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); saveProject(); }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'c' && copyClipAppearance()) { e.preventDefault(); }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'v' && pasteClipAppearance()) { e.preventDefault(); }
@@ -3431,9 +3923,11 @@ document.addEventListener('keydown', (e) => {
   else if (mod && e.key.toLowerCase() === 'v' && pasteTimelineItem()) { e.preventDefault(); }
   else if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); splitSelectedClip(); }
   else if (mod && e.key.toLowerCase() === 'j' && activeTimelineItem.type === 'audio') { e.preventDefault(); splitSelectedAudioTrack(); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedMarkerId && deleteSelectedMarker()) { e.preventDefault(); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && activeTimelineItem.type === 'clip' && state.selectedClipId) { e.preventDefault(); rippleDeleteSelectedClip(); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && deleteActiveTimelineItem()) { e.preventDefault(); }
-  else if (e.key === 'ArrowLeft' && nudgeActiveTimelineItem(-nudge)) { e.preventDefault(); }
-  else if (e.key === 'ArrowRight' && nudgeActiveTimelineItem(nudge)) { e.preventDefault(); }
+  else if (e.key === 'ArrowLeft' && (nudgeActiveTimelineItem(-nudge) || nudgePlayhead(-(e.shiftKey ? 1 : 1 / (state.frameRate || 30))))) { e.preventDefault(); }
+  else if (e.key === 'ArrowRight' && (nudgeActiveTimelineItem(nudge) || nudgePlayhead(e.shiftKey ? 1 : 1 / (state.frameRate || 30)))) { e.preventDefault(); }
   else if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
   else if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
 });

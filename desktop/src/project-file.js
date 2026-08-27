@@ -256,6 +256,20 @@ function cleanAudioTrack(value, index) {
   };
 }
 
+function cleanMarkers(value) {
+  const used = new Set();
+  return array(value).map((marker, index) => {
+    let markerId = id(marker && marker.id, index + 1);
+    while (used.has(markerId)) markerId++;
+    used.add(markerId);
+    return {
+      id: markerId,
+      time: number(marker && marker.time, 0, 0, 24 * 60 * 60),
+      name: string(marker && marker.name).slice(0, 120),
+    };
+  }).sort((a, b) => a.time - b.time || a.id - b.id);
+}
+
 function outputProfile(value) {
   return ['720p', '1080p', '2k', '4k'].includes(value) ? value : '1080p';
 }
@@ -281,6 +295,7 @@ function normaliseProjectState(value) {
     videoTracks,
     selectedVideoTrackId: videoTracks.some((track) => track.id === state.selectedVideoTrackId) ? state.selectedVideoTrackId : videoTracks[0].id,
     audioTracks: array(state.audioTracks).map(cleanAudioTrack),
+    markers: cleanMarkers(state.markers),
     bgm: cleanBgm(state.bgm),
     originalVolume: number(state.originalVolume, 1, 0, 1),
     bgmVolume: number(state.bgmVolume, 0.5, 0, 1),
@@ -303,6 +318,7 @@ function normaliseProjectState(value) {
     canvasColor: colour(state.canvasColor, '#000000'),
     outputProfile: outputProfile(state.outputProfile),
     frameRate: number(state.frameRate, 30, 24, 60),
+    snapEnabled: state.snapEnabled !== false,
   };
 }
 

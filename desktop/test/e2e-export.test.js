@@ -313,6 +313,16 @@ async function exportAndCheck(spec, expectedTotal, label) {
     await exportAndCheck({ clips: [a], settings: {} }, 2, 'reverse');
   });
 
+  await ok('reversed clip split in visible order exports continuously', async () => {
+    const source = await probedClip('a.mp4', 0, 3, { reverse: true });
+    const timeline = require('../src/timeline-utils');
+    const split = timeline.splitClipAtSourceTime(source, 1, 77);
+    assert.ok(split);
+    assert.deepStrictEqual([split.left.trimStart, split.left.trimEnd], [1, 3]);
+    assert.deepStrictEqual([split.right.trimStart, split.right.trimEnd], [0, 1]);
+    await exportAndCheck({ clips: [split.left, split.right], settings: {} }, 3, 'reverseSplitVisibleOrder');
+  });
+
   await ok('clip original audio gain and fades export', async () => {
     const a = await probedClip('a.mp4', 0, 2, { volume: 0.6, fadeIn: 0.3, fadeOut: 0.4 });
     await exportAndCheck({ clips: [a], settings: {} }, 2, 'clipAudioFade');

@@ -25,9 +25,10 @@ function sampleState() {
     brolls: [{ id: 11, path: '/media/broll.mp4', name: 'broll.mp4', duration: 12, start: 1, end: 6, trimStart: 0.5, loop: true, opacity: 0.8, fade: 0.2 }],
     videoTracks: [{ id: 'video-1', name: '底层视频', visible: true, locked: false }, { id: 'video-2', name: '顶层视频', visible: false, locked: true }],
     selectedVideoTrackId: 'video-2',
+    markers: [{ id: 21, time: 2.5, name: '开场' }, { id: 22, time: 7.25, name: '产品亮点' }],
     bgm: { path: '/media/music.mp3', name: 'music.mp3', duration: 60, trimStart: 1.2, fadeIn: 0.5, fadeOut: 0.8 },
     audioTracks: [{ id: 10, path: '/media/voice.wav', name: 'voice.wav', duration: 8, start: 1, end: 5, trimStart: 0.5, volume: 0.7, fadeIn: 0.2, fadeOut: 0.4, muteRanges: [{ start: 0.5, end: 1.25 }], loop: false }],
-    originalVolume: 0.8, bgmVolume: 0.3, bgmDuck: true, bgmDuckAmount: 0.5, loudnessNormalize: true, aspect: '9:16', fillMode: 'blur', canvasColor: '#123456', outputProfile: '4k', frameRate: 60,
+    originalVolume: 0.8, bgmVolume: 0.3, bgmDuck: true, bgmDuckAmount: 0.5, loudnessNormalize: true, aspect: '9:16', fillMode: 'blur', canvasColor: '#123456', outputProfile: '4k', frameRate: 60, snapEnabled: false,
   };
 }
 
@@ -52,6 +53,7 @@ ok('preserves static image main-track clips', () => {
 ok('round-trips all editable state', () => {
   const parsed = project.parseProject(project.serializeProject(sampleState()));
   assert.strictEqual(parsed.state.clips[0].speed, 1.5);
+  assert.strictEqual(parsed.state.clips[0].name, 'a.mp4');
   assert.strictEqual(parsed.state.clips[0].muted, true);
   assert.strictEqual(parsed.state.clips[0].volume, 0.6);
   assert.strictEqual(parsed.state.clips[0].fadeIn, 0.2);
@@ -89,6 +91,7 @@ ok('round-trips all editable state', () => {
   assert.strictEqual(parsed.state.brolls[0].trackId, 'video-1');
   assert.strictEqual(parsed.state.videoTracks[1].locked, true);
   assert.strictEqual(parsed.state.selectedVideoTrackId, 'video-2');
+  assert.deepStrictEqual(parsed.state.markers, [{ id: 21, time: 2.5, name: '开场' }, { id: 22, time: 7.25, name: '产品亮点' }]);
   assert.strictEqual(parsed.state.bgm.path, '/media/music.mp3');
   assert.strictEqual(parsed.state.bgm.trimStart, 1.2);
   assert.strictEqual(parsed.state.bgm.fadeOut, 0.8);
@@ -99,6 +102,7 @@ ok('round-trips all editable state', () => {
   assert.strictEqual(parsed.state.canvasColor, '#123456');
   assert.strictEqual(parsed.state.outputProfile, '4k');
   assert.strictEqual(parsed.state.frameRate, 60);
+  assert.strictEqual(parsed.state.snapEnabled, false);
   assert.strictEqual(parsed.state.bgmDuck, true);
   assert.strictEqual(parsed.state.loudnessNormalize, true);
 });
@@ -133,6 +137,17 @@ ok('clamps unsafe values to supported editor ranges', () => {
   assert.strictEqual(parsed.state.canvasColor, '#000000');
   assert.strictEqual(parsed.state.outputProfile, '1080p');
   assert.strictEqual(parsed.state.frameRate, 30);
+  assert.strictEqual(parsed.state.snapEnabled, true);
+  assert.deepStrictEqual(parsed.state.markers, []);
+});
+
+ok('normalizes malformed markers into unique bounded timeline positions', () => {
+  const parsed = project.parseProject(project.serializeProject({
+    markers: [{ id: 5, time: -2 }, { id: 5, time: 'bad' }, { id: 0, time: 99999999 }],
+  }));
+  assert.deepStrictEqual(parsed.state.markers, [
+    { id: 5, time: 0, name: '' }, { id: 6, time: 0, name: '' }, { id: 1, time: 24 * 60 * 60, name: '' },
+  ]);
 });
 
 ok('rejects malformed, foreign and future documents', () => {

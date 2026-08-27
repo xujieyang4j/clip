@@ -88,6 +88,9 @@
         <div id="clipEmpty" class="pane-empty">在下方时间线点选一个片段进行编辑</div>
         <div id="clipInspector" class="hidden">
           <h3 id="clipTitle">片段</h3>
+          <div class="field">
+            <label>片段名称 <input id="clipName" type="text" maxlength="160" placeholder="为片段命名…" /></label>
+          </div>
 
           <div class="field">
             <div class="row">
@@ -702,16 +705,27 @@
     <div class="timeline-head">
       <span class="timeline-title">时间线</span>
       <span id="timelineHint" class="hint"></span>
+      <div class="timeline-markers" aria-label="时间线标记">
+        <button id="btnToggleSnap" class="btn btn-small is-active" title="关闭时间线磁吸">🧲 磁吸</button>
+        <button id="btnAddMarker" class="btn btn-small" title="在播放头添加标记（M）">◆ 标记</button>
+        <button id="btnPrevMarker" class="btn btn-small" title="跳转到上一个标记">◀</button>
+        <button id="btnNextMarker" class="btn btn-small" title="跳转到下一个标记">▶</button>
+        <button id="btnDeleteMarker" class="btn btn-small btn-danger" title="删除选中的标记" disabled>删除标记</button>
+        <input id="markerName" class="timeline-marker-name" type="text" maxlength="120" placeholder="标记注释…" aria-label="标记注释" disabled />
+      </div>
+      <input id="timelineTimecode" class="timeline-timecode" type="text" inputmode="decimal" placeholder="跳转时间…" title="输入秒数或时间码后回车跳转" aria-label="跳转时间" />
       <div class="timeline-zoom">
-        <button id="btnTimelineZoomOut" class="btn btn-small" title="缩小时间线">−</button>
+        <button id="btnTimelineZoomOut" class="btn btn-small" title="缩小时间线（Ctrl/⌘ + 滚轮也可缩放）">−</button>
         <span id="timelineZoomLabel" class="muted small">100%</span>
-        <button id="btnTimelineZoomIn" class="btn btn-small" title="放大时间线">＋</button>
+        <button id="btnTimelineZoomIn" class="btn btn-small" title="放大时间线（Ctrl/⌘ + 滚轮也可缩放）">＋</button>
+        <button id="btnTimelineFit" class="btn btn-small" title="适配整条时间线（Shift+Z）">适配</button>
       </div>
     </div>
     <div id="timelineViewport" class="timeline-viewport">
       <div id="timelineRuler" class="timeline-ruler"></div>
       <div id="timelineTrack" class="timeline-track">
         <div id="timelinePlayhead" class="timeline-playhead hidden"></div>
+        <div id="timelineSnapGuide" class="timeline-snap-guide hidden"></div>
         <div id="videoTrackLane" class="timeline-lane timeline-video-lane" data-lane-label="视频">
           <div class="lane-controls">
             <button id="btnLockVideoTrack" class="lane-btn" title="锁定主视频轨">🔓</button>

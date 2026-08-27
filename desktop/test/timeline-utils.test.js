@@ -65,6 +65,27 @@ ok('lays clips on output seconds with transition overlaps', () => {
   assert.strictEqual(layout.total, 8);
 });
 
+ok('locates output timeline clips and prefers the selected clip in an overlap', () => {
+  const a = { id: 1, trimStart: 0, trimEnd: 3, speed: 1 };
+  const b = { id: 2, trimStart: 0, trimEnd: 4, speed: 1 };
+  const layout = t.layoutClips([a, b], [1, 0]);
+  assert.strictEqual(t.locateTimelineTime(layout, 2.5).clip.id, 1);
+  assert.strictEqual(t.locateTimelineTime(layout, 2.5, 2).clip.id, 2);
+  assert.strictEqual(t.locateTimelineTime(layout, 8), null);
+});
+
+ok('lists and navigates unique edit points across transition overlaps', () => {
+  const layout = t.layoutClips([
+    { id: 1, trimStart: 0, trimEnd: 3, speed: 1 },
+    { id: 2, trimStart: 0, trimEnd: 4, speed: 1 },
+  ], [1, 0]);
+  assert.deepStrictEqual(t.editPoints(layout), [0, 2, 3, 6]);
+  assert.strictEqual(t.adjacentEditPoint(layout, 2.5, -1), 2);
+  assert.strictEqual(t.adjacentEditPoint(layout, 2.5, 1), 3);
+  assert.strictEqual(t.adjacentEditPoint(layout, 0, -1), null);
+  assert.strictEqual(t.adjacentEditPoint(layout, 6, 1), null);
+});
+
 ok('locates a time on the sequential browser preview timeline', () => {
   const clips = [{ trimStart: 0, trimEnd: 2 }, { trimStart: 0, trimEnd: 3 }];
   const where = t.locateSequentialTime(clips, 2.5);
@@ -78,6 +99,15 @@ ok('chooses ruler steps based on visible pixel density', () => {
   const ticks = t.rulerTicks(5.2, 80);
   assert.strictEqual(ticks.step, 1);
   assert.strictEqual(ticks.ticks[ticks.ticks.length - 1], 5.2);
+});
+
+ok('formats and parses editor timecodes', () => {
+  assert.strictEqual(t.formatTimecode(62.5), '1:02.5');
+  assert.strictEqual(t.formatTimecode(3662.5), '1:01:02.5');
+  assert.strictEqual(t.parseTimecode('1:02.5'), 62.5);
+  assert.strictEqual(t.parseTimecode('1:01:02.5'), 3662.5);
+  assert.strictEqual(t.parseTimecode('12.25'), 12.25);
+  assert.strictEqual(t.parseTimecode('1:bad'), null);
 });
 
 ok('moves and resizes timed timeline items with duration guards', () => {
@@ -103,6 +133,34 @@ ok('snaps timeline times only when a guide is inside threshold', () => {
   assert.strictEqual(t.snapTime(1.04, [0, 1, 2], 0.05), 1);
   assert.strictEqual(t.snapTime(1.08, [0, 1, 2], 0.05), 1.08);
   assert.strictEqual(t.snapTime(0.02, [0, 1], 0.05), 0);
+});
+
+ok('orders markers and navigates only to strictly adjacent positions', () => {
+  const markers = [{ id: 4, time: 5 }, { id: 2, time: 1.5 }, { id: 3, time: 1.5 }];
+  assert.deepStrictEqual(t.sortedMarkers(markers).map((marker) => marker.id), [2, 3, 4]);
+  assert.strictEqual(t.adjacentMarker(markers, 1.5, -1), null);
+  assert.strictEqual(t.adjacentMarker(markers, 1.5, 1).id, 4);
+  assert.strictEqual(t.adjacentMarker(markers, 5.2, -1).id, 4);
+  assert.strictEqual(t.adjacentMarker(markers, 5.2, 1), null);
+});
+
+ok('trims source bounds from output timeline deltas at clip speed', () => {
+  const clip = { sourceDuration: 12, trimStart: 2, trimEnd: 10, speed: 2 };
+  assert.deepStrictEqual(t.trimClipByOutputDelta(clip, 'start', 1), { trimStart: 4, trimEnd: 10 });
+  assert.deepStrictEqual(t.trimClipByOutputDelta(clip, 'end', -1.5), { trimStart: 2, trimEnd: 7 });
+  assert.deepStrictEqual(t.trimClipByOutputDelta(clip, 'start', 99), { trimStart: 9.9, trimEnd: 10 });
+  assert.deepStrictEqual(t.trimClipByOutputDelta(clip, 'end', -99), { trimStart: 2, trimEnd: 2.1 });
+  const reversed = Object.assign({}, clip, { reverse: true });
+  assert.deepStrictEqual(t.trimClipByOutputDelta(reversed, 'start', 1), { trimStart: 2, trimEnd: 8 });
+  assert.deepStrictEqual(t.trimClipByOutputDelta(reversed, 'end', -1.5), { trimStart: 5, trimEnd: 10 });
+});
+
+ok('maps visible clip offsets back to source time for forward and reversed clips', () => {
+  const forward = { trimStart: 2, trimEnd: 10, speed: 2 };
+  assert.strictEqual(t.sourceTimeAtClipOutputOffset(forward, 1.5), 5);
+  const reversed = Object.assign({}, forward, { reverse: true });
+  assert.strictEqual(t.sourceTimeAtClipOutputOffset(reversed, 1.5), 7);
+  assert.strictEqual(t.sourceTimeAtClipOutputOffset(reversed, 99), 2);
 });
 
 ok('splits generic timed item at a valid output timeline point', () => {
@@ -148,6 +206,13 @@ ok('splits a clip and moves its outgoing transition to the right half', () => {
   assert.deepStrictEqual(result.right.animationIn, { style: 'none', duration: 0 });
   assert.deepStrictEqual(result.right.animationOut, { style: 'fade', duration: 0.6 });
   assert.deepStrictEqual(result.right.transitionToNext, { style: 'fade', duration: 0.5 });
+
+  const reversed = t.splitClipAtSourceTime(Object.assign({}, clip, { reverse: true }), 4, 5);
+  assert.ok(reversed);
+  assert.deepStrictEqual([reversed.left.trimStart, reversed.left.trimEnd], [4, 9]);
+  assert.deepStrictEqual([reversed.right.trimStart, reversed.right.trimEnd], [1, 4]);
+  assert.deepStrictEqual(reversed.left.animationIn, { style: 'slideLeft', duration: 0.4 });
+  assert.deepStrictEqual(reversed.right.animationOut, { style: 'fade', duration: 0.6 });
 });
 
 ok('refuses a split at either trim edge', () => {

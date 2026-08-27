@@ -48,6 +48,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: #4a7cf0; }
+.btn.is-active { color: #fff; border-color: #79e0ed; background: rgba(50, 132, 147, .45); }
 .btn-danger { color: var(--danger); border-color: transparent; background: transparent; }
 .btn-small { padding: 4px 9px; font-size: 12px; }
 .top-select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px; font-size: 12px; }
@@ -189,7 +190,11 @@ input[type="color"] { width: 34px; height: 24px; padding: 0; border: 1px solid v
 .timeline-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
 .timeline-title { font-size: 15px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; }
+.timeline-markers { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.timeline-marker-name { width: 104px; min-width: 64px; padding: 3px 6px; font-size: 11px; }
+.timeline-timecode { width: 82px; padding: 3px 6px; font-size: 11px; }
 .timeline-zoom { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.timeline-markers + .timeline-zoom { margin-left: 4px; }
 .timeline-zoom .btn { min-width: 27px; padding: 2px 7px; }
 .timeline-zoom span { min-width: 37px; text-align: center; }
 .timeline-viewport { flex: 1; overflow: auto; position: relative; padding-bottom: 8px; }
@@ -197,14 +202,15 @@ input[type="color"] { width: 34px; height: 24px; padding: 0; border: 1px solid v
 .ruler-tick { position: absolute; bottom: 0; height: 7px; border-left: 1px solid var(--border); }
 .ruler-tick.major { height: 12px; border-color: #676b75; }
 .ruler-tick span { position: absolute; top: 0; left: 4px; color: var(--muted); font-size: 10px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ruler-beat { position: absolute; bottom: 1px; height: 5px; border-left: 1px solid #f0b85a; opacity: .9; pointer-events: none; }
 .timeline-track { position: relative; min-width: 100%; min-height: 255px; height: auto; padding-top: 4px; }
 .timeline-lane { position: relative; min-width: 100%; height: 52px; border-top: 1px solid var(--border); padding-left: 46px; }
 .timeline-lane::before { content: attr(data-lane-label); position: absolute; left: 4px; top: 17px; width: 34px; color: var(--muted); font-size: 10px; z-index: 2; text-align: center; }
 .lane-controls { position: absolute; left: 1px; bottom: 5px; z-index: 4; }
 .lane-btn { background: transparent; border: 0; color: var(--muted); padding: 1px 4px; cursor: pointer; font-size: 12px; }
 .timeline-video-lane.locked .card { opacity: .55; cursor: not-allowed; }
-.timeline-video-lane { height: 98px; border-top: 0; }
-.clips { position: relative; height: 98px; min-width: 100%; }
+.timeline-video-lane { height: 164px; border-top: 0; }
+.clips { position: relative; height: 164px; min-width: 100%; }
 .timeline-media-lane { background: rgba(104, 71, 145, 0.13); }
 .timeline-broll-lane { background: rgba(88, 72, 38, 0.16); }
 .timeline-audio-lane { background: rgba(37, 64, 96, 0.16); }
@@ -242,20 +248,32 @@ input[type="color"] { width: 34px; height: 24px; padding: 0; border: 1px solid v
 .timeline-empty { position: absolute; inset: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; min-width: 100%; }
 .timeline-playhead { position: absolute; z-index: 20; top: -24px; bottom: 0; width: 2px; background: #ff6262; pointer-events: none; }
 .timeline-playhead::before { content: ''; position: absolute; top: 0; left: -5px; width: 12px; height: 8px; background: #ff6262; clip-path: polygon(0 0,100% 0,50% 100%); }
+.timeline-snap-guide { position: absolute; z-index: 18; top: -24px; bottom: 0; width: 1px; background: #79e0ed; box-shadow: 0 0 5px rgba(121,224,237,.85); pointer-events: none; }
+.timeline-marker { position: absolute; z-index: 19; top: -23px; width: 14px; height: 15px; margin-left: -7px; padding: 0; border: 0; background: transparent; color: #ffd15c; cursor: pointer; font: inherit; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+.timeline-marker::before { content: '◆'; display: block; font-size: 15px; line-height: 15px; }
+.timeline-marker::after { content: ''; position: absolute; left: 6px; top: 13px; bottom: -9999px; border-left: 1px dashed rgba(255,209,92,.5); pointer-events: none; }
+.timeline-marker.selected { color: #fff1b5; transform: scale(1.18); }
+.timeline-marker:hover { color: #fff1b5; }
 
 .card {
-  position: absolute; top: 0; height: 100px; min-width: 64px; overflow: hidden;
+  position: absolute; top: 0; height: 164px; min-width: 64px; overflow: hidden;
   background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 6px; cursor: grab;
 }
 .card.dragging { opacity: 0.4; }
 .card.drop-target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.clip-trim-handle { position: absolute; z-index: 5; top: 0; bottom: 0; width: 9px; opacity: 0; cursor: ew-resize; transition: opacity .12s, background .12s; }
+.clip-trim-handle.start { left: 0; border-left: 3px solid #fff; }
+.clip-trim-handle.end { right: 0; border-right: 3px solid #fff; }
+.card:hover .clip-trim-handle, .card.selected .clip-trim-handle { opacity: .7; }
+.clip-trim-handle:hover { opacity: 1 !important; background: rgba(91, 140, 255, .28); }
 
 .card-thumb { width: 100%; height: 42px; background: #000; border-radius: 4px; object-fit: cover; display: block; }
 .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .card-index { background: var(--accent); color: #fff; border-radius: 4px; padding: 0 6px; font-size: 11px; }
-.card-badges { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; min-height: 14px; }
+.card-badges { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; min-height: 14px; max-height: 28px; overflow: hidden; }
 .badge { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 10px; color: var(--muted); }
 .card-dur { color: var(--muted); font-size: 10px; margin-top: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card-name { color: var(--text); font-size: 10px; line-height: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
 .card-actions { display: flex; gap: 4px; margin-top: 4px; }
 .card-actions .btn { flex: 1; padding: 3px; }

@@ -22,6 +22,16 @@ ok('writes and reads a .miniclip document', () => {
   assert.strictEqual(loaded.state.aspect, '16:9');
 });
 
+ok('preserves timeline markers in saved projects and recovery files', () => {
+  const marked = Object.assign({}, state, { markers: [{ id: 9, time: 3.25, name: '重点' }] });
+  const markedFile = path.join(dir, 'marked.miniclip');
+  const recovery = path.join(dir, 'marked-recovery.miniclip');
+  store.writeProject(markedFile, marked);
+  store.writeRecovery(recovery, marked);
+  assert.deepStrictEqual(store.readProject(markedFile).state.markers, [{ id: 9, time: 3.25, name: '重点' }]);
+  assert.deepStrictEqual(store.readRecovery(recovery).state.markers, [{ id: 9, time: 3.25, name: '重点' }]);
+});
+
 ok('refuses non-project extensions', () => {
   assert.throws(() => store.writeProject(path.join(dir, 'edit.json'), state));
   assert.throws(() => store.readProject(path.join(dir, 'edit.json')));
