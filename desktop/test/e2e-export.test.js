@@ -15,6 +15,7 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 const runner = require('../src/ffmpeg-runner');
+const overlayExport = require('../src/overlay-export-utils');
 
 const MEDIA = path.join(os.tmpdir(), 'mc_e2e');
 const OUT = path.join(os.tmpdir(), 'mc_e2e_out');
@@ -457,6 +458,19 @@ async function exportAndCheck(spec, expectedTotal, label) {
       3,
       'processedOverlay'
     );
+  });
+
+  await ok('renderer overlay mapping preserves advanced processing through export', async () => {
+    const a = await probedClip('a.mp4', 0, 3);
+    const mapped = overlayExport.toExportOverlay({
+      path: path.join(MEDIA, 'logo.png'), kind: 'image', start: 0.2, end: 2.8,
+      x: 30, y: 35, scale: 0.32, opacity: 0.8, fade: 0.2,
+      mirrorX: true, crop: { left: 0.08, right: 0.04, top: 0.03, bottom: 0.06 },
+      mask: 'rounded', maskFeather: 0.08,
+      chromaKey: { enabled: true, color: '#00ff00', similarity: 0.2, blend: 0.05 },
+      blendMode: 'screen',
+    }, { scaleX: 1, scaleY: 1 });
+    await exportAndCheck({ clips: [a], overlays: [mapped], settings: {} }, 3, 'mappedAdvancedOverlay');
   });
 
   await ok('rounded inverted feathered mask overlay exports', async () => {

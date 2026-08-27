@@ -65,5 +65,6 @@ const context = {
 };
 context.globalThis = context;
 vm.runInNewContext(fs.readFileSync(path.join(src, 'timeline-utils.js'), 'utf8'), context, { filename: 'timeline-utils.js' });
+vm.runInNewContext(fs.readFileSync(path.join(src, 'overlay-export-utils.js'), 'utf8'), context, { filename: 'overlay-export-utils.js' });
 vm.runInNewContext(fs.readFileSync(path.join(src, 'renderer.js'), 'utf8'), context, { filename: 'renderer.js' });
 console.log(`renderer boot smoke: ${ids.size} DOM ids wired`);

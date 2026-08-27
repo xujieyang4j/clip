@@ -23,6 +23,7 @@ const timeline = window.MiniClipTimeline;
 const keyframe = window.MiniClipKeyframes;
 const clipAppearance = window.MiniClipClipAppearance;
 const clipTransform = window.MiniClipClipTransform;
+const overlayExport = window.MiniClipOverlayExport;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -3284,11 +3285,9 @@ function buildSpec() {
       transformKeyframes: c.transformKeyframes,
       transitionToNext: c.transitionToNext,
     })),
-    overlays: state.overlays.map((o) => ({
-      path: o.path, kind: o.kind, start: o.start, end: o.end,
-      x: o.x * scaleX, y: o.y * scaleY, scale: o.scale, rotation: o.rotation || 0, opacity: o.opacity,
-      fadeDuration: o.fade || 0, move: scalePoint(o.move),
-      keyframes: o.keyframes && o.keyframes.length ? scaleFrames(o.keyframes) : undefined,
+    overlays: state.overlays.map((o) => overlayExport.toExportOverlay(o, {
+      scaleX, scaleY,
+      keyframes: o.keyframes && o.keyframes.length ? keyframe.normaliseKeyframes(o) : undefined,
     })).filter(() => state.trackControls.overlayVisible),
     brolls: orderedVisibleBrolls().map((broll) => ({
       path: broll.path, kind: 'video', start: broll.start, end: broll.end, trimStart: broll.trimStart || 0,
