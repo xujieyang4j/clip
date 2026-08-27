@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="510" viewBox="0 0 1200 510" role="img" aria-labelledby="title desc">
+  <title id="title">MiniClip timeline precision editing guide</title>
+  <desc id="desc">An annotated timeline showing clips, trim handles, playhead, markers, beat ticks, snapping guide, timecode input and edit point navigation.</desc>
+  <defs><style>.ui{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}.h{font-size:19px;font-weight:700;fill:#f5f7fb}.t{font-size:14px;fill:#c8d0db}.m{font-size:12px;fill:#9ca8b7}.n{font-size:16px;font-weight:700;fill:#fff;text-anchor:middle;dominant-baseline:middle}.call{fill:#5b8cff}.line{stroke:#77a5ff;stroke-width:2;fill:none}</style></defs>
+  <rect width="1200" height="510" rx="18" fill="#171a20"/>
+  <g class="ui">
+    <text x="38" y="43" class="h">时间线精剪：先定位，再裁剪、分割或插入</text>
+    <text x="38" y="68" class="t">每个标记、节拍、片段边缘与播放头都可成为磁吸目标；青色线表示已吸附。</text>
+    <rect x="30" y="91" width="1140" height="336" rx="11" fill="#20242c" stroke="#48515f"/>
+    <rect x="30" y="91" width="1140" height="48" rx="11" fill="#2b3039"/>
+    <text x="52" y="121" class="h">时间线</text><text x="130" y="121" class="m">点击定位 · 拖动播放头 · M 标记 · Ctrl/⌘+B 分割</text>
+    <rect x="672" y="105" width="78" height="23" rx="5" fill="#294a53" stroke="#79e0ed"/><text x="684" y="121" class="m" fill="#fff">🧲 磁吸</text>
+    <rect x="760" y="105" width="90" height="23" rx="5" fill="#343a45" stroke="#596271"/><text x="772" y="121" class="m">◆ 标记</text>
+    <rect x="860" y="105" width="116" height="23" rx="5" fill="#343a45" stroke="#596271"/><text x="870" y="121" class="m">开场 · 注释</text>
+    <rect x="986" y="105" width="80" height="23" rx="5" fill="#343a45" stroke="#596271"/><text x="997" y="121" class="m">1:02.5</text>
+    <rect x="1075" y="105" width="66" height="23" rx="5" fill="#343a45" stroke="#596271"/><text x="1086" y="121" class="m">适配</text>
+    <line x1="84" y1="170" x2="1142" y2="170" stroke="#596270"/>
+    <g class="m"><text x="92" y="161">0s</text><text x="267" y="161">2s</text><text x="442" y="161">4s</text><text x="617" y="161">6s</text><text x="792" y="161">8s</text><text x="967" y="161">10s</text></g>
+    <g stroke="#f0b85a"><line x1="216" y1="165" x2="216" y2="170"/><line x1="259" y1="165" x2="259" y2="170"/><line x1="472" y1="165" x2="472" y2="170"/><line x1="515" y1="165" x2="515" y2="170"/><line x1="814" y1="165" x2="814" y2="170"/></g>
+    <text x="45" y="224" class="m">视频</text>
+    <rect x="84" y="186" width="255" height="104" rx="7" fill="#455b7e" stroke="#7797cc"/>
+    <rect x="344" y="186" width="218" height="104" rx="7" fill="#4d6389" stroke="#86a5dc"/>
+    <rect x="566" y="186" width="298" height="104" rx="7" fill="#455b7e" stroke="#7797cc"/>
+    <rect x="90" y="194" width="243" height="48" rx="4" fill="#29466f"/><rect x="350" y="194" width="206" height="48" rx="4" fill="#355783"/><rect x="572" y="194" width="286" height="48" rx="4" fill="#29466f"/>
+    <text x="103" y="266" class="t">开场镜头.mp4</text><text x="360" y="266" class="t">产品特写.mp4</text><text x="582" y="266" class="t">结尾镜头.mp4</text>
+    <line x1="84" y1="190" x2="84" y2="286" stroke="#fff" stroke-width="4"/><line x1="339" y1="190" x2="339" y2="286" stroke="#fff" stroke-width="4"/>
+    <line x1="562" y1="190" x2="562" y2="286" stroke="#fff" stroke-width="4"/>
+    <path d="M446 146 H458 L452 154Z" fill="#ff6262"/><line x1="452" y1="146" x2="452" y2="396" stroke="#ff6262" stroke-width="2"/>
+    <path d="M451 145 l9 -9 l9 9 l-9 9z" fill="#ffd15c"/><text x="467" y="145" class="m">开场</text>
+    <line x1="515" y1="145" x2="515" y2="396" stroke="#79e0ed" stroke-width="2" stroke-dasharray="5 4"/>
+    <text x="522" y="195" class="m" fill="#aef4f4">已磁吸</text>
+    <text x="45" y="337" class="m">文字</text><rect x="401" y="310" width="162" height="30" rx="5" fill="#5a437c" stroke="#9a78c7"/><text x="414" y="330" class="t">T 产品卖点字幕</text>
+    <text x="45" y="385" class="m">音频</text><rect x="520" y="359" width="262" height="30" rx="5" fill="#285b65" stroke="#4c9eaa"/><path d="M530 374 l8 -7 l8 14 l8 -11 l8 6 l8 -13 l8 16 l8 -7 l8 5 l8 -10 l8 11" fill="none" stroke="#b7f4f1" stroke-width="2"/>
+
+    <circle cx="84" cy="298" r="15" class="call"/><text x="84" y="299" class="n">1</text><path d="M84 313 L84 349" class="line"/><text x="38" y="472" class="t">1 拖动白色边缘裁剪</text>
+    <circle cx="452" cy="110" r="15" class="call"/><text x="452" y="111" class="n">2</text><path d="M452 125 L452 142" class="line"/><text x="332" y="472" class="t">2 红线是播放头</text>
+    <circle cx="515" cy="110" r="15" class="call"/><text x="515" y="111" class="n">3</text><path d="M515 125 L515 142" class="line"/><text x="545" y="472" class="t">3 青线表示磁吸</text>
+    <circle cx="838" cy="161" r="15" class="call"/><text x="838" y="162" class="n">4</text><path d="M838 176 L838 185" class="line"/><text x="740" y="472" class="t">4 标记 / 节拍可对齐</text>
+    <text x="985" y="472" class="t">I/O 设入出点 · PgUp/PgDn 跳剪辑点</text>
+  </g>
+</svg>

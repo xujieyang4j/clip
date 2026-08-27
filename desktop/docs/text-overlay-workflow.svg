@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="title desc">
+  <title id="title">MiniClip text overlay and audio layering guide</title>
+  <desc id="desc">An annotated editor canvas showing a caption, picture in picture overlay, B-roll and audio track placement.</desc>
+  <defs><style>.ui{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}.h{font-size:19px;font-weight:700;fill:#f5f7fb}.t{font-size:14px;fill:#c8d0db}.m{font-size:12px;fill:#9ca8b7}.n{font-size:16px;font-weight:700;fill:#fff;text-anchor:middle;dominant-baseline:middle}.call{fill:#5b8cff}.line{stroke:#77a5ff;stroke-width:2;fill:none}</style></defs>
+  <rect width="1200" height="460" rx="18" fill="#171a20"/>
+  <g class="ui">
+    <text x="39" y="43" class="h">文字、画中画、视频层和声音都按时间线叠放</text><text x="39" y="68" class="t">先在轨道上定时间，再在右侧检查器调位置、样式和动画；导出时以 FFmpeg 成片为准。</text>
+    <rect x="38" y="96" width="650" height="270" rx="10" fill="#11161e" stroke="#465160"/>
+    <rect x="65" y="121" width="596" height="213" rx="5" fill="#31557e"/>
+    <path d="M66 296 C170 188 283 338 389 233 S558 192 660 292V334H66Z" fill="#1f365c"/>
+    <rect x="86" y="143" width="229" height="40" rx="6" fill="#ffffff" opacity=".94"/><text x="101" y="168" class="t" fill="#1d2634">新品上线 · 限时优惠</text>
+    <rect x="513" y="223" width="119" height="84" rx="7" fill="#efbc6d" stroke="#ffe0a5"/><circle cx="572" cy="264" r="21" fill="#5b8cff"/><path d="M566 251v26l20-13z" fill="#fff"/>
+    <rect x="702" y="96" width="460" height="270" rx="10" fill="#2a2f38" stroke="#465160"/>
+    <rect x="702" y="96" width="460" height="42" rx="10" fill="#333944"/><text x="726" y="122" class="t" fill="#fff">文字  ·  叠加  ·  视频层  ·  音频</text>
+    <text x="727" y="172" class="h">选中素材后调整</text><text x="727" y="201" class="t">开始 / 结束时间、大小、位置、不透明度</text><text x="727" y="229" class="t">淡入淡出、关键帧、字体和描边</text>
+    <rect x="727" y="255" width="184" height="24" rx="5" fill="#574476"/><text x="739" y="272" class="m" fill="#fff">T 字幕样式与位置</text><rect x="727" y="290" width="184" height="24" rx="5" fill="#6a4b2f"/><text x="739" y="307" class="m" fill="#fff">◇ 画中画 / 贴纸</text><rect x="927" y="255" width="202" height="24" rx="5" fill="#5d4d2b"/><text x="939" y="272" class="m" fill="#fff">▣ 视频层（B-roll）</text><rect x="927" y="290" width="202" height="24" rx="5" fill="#285b65"/><text x="939" y="307" class="m" fill="#fff">♪ 独立音频 / 旁白</text>
+    <rect x="38" y="386" width="1124" height="43" rx="7" fill="#222731" stroke="#465160"/>
+    <text x="54" y="413" class="m">视频</text><rect x="99" y="395" width="310" height="25" rx="4" fill="#465b80"/><text x="111" y="413" class="m" fill="#fff">主视频</text>
+    <text x="438" y="413" class="m">视频层</text><rect x="493" y="395" width="195" height="25" rx="4" fill="#5d4d2b"/><text x="505" y="413" class="m" fill="#fff">B-roll</text>
+    <text x="714" y="413" class="m">文字</text><rect x="756" y="395" width="158" height="25" rx="4" fill="#574476"/><text x="768" y="413" class="m" fill="#fff">字幕条</text>
+    <text x="941" y="413" class="m">音频</text><rect x="982" y="395" width="145" height="25" rx="4" fill="#285b65"/>
+    <circle cx="92" cy="132" r="15" class="call"/><text x="92" y="133" class="n">1</text><path d="M106 132 L145 150" class="line"/><text x="40" y="454" class="t">1 文字先定时间，再调样式</text>
+    <circle cx="643" cy="213" r="15" class="call"/><text x="643" y="214" class="n">2</text><path d="M630 220 L610 237" class="line"/><text x="295" y="454" class="t">2 画中画可拖动、缩放、关键帧动画</text>
+    <circle cx="674" cy="385" r="15" class="call"/><text x="674" y="386" class="n">3</text><path d="M674 400 L674 394" class="line"/><text x="700" y="454" class="t">3 轨道决定出现时间与叠放顺序</text>
+  </g>
+</svg>
