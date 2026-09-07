@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('miniclip', {
 
   // file pickers (return probed metadata)
   pickVideos: () => ipcRenderer.invoke('miniclip:pickVideos'),
+  pickMedia: () => ipcRenderer.invoke('miniclip:pickMedia'),
   pickAudio: (opts) => ipcRenderer.invoke('miniclip:pickAudio', opts),
   saveRecording: (payload) => ipcRenderer.invoke('miniclip:saveRecording', payload),
   pickOverlayMedia: () => ipcRenderer.invoke('miniclip:pickOverlayMedia'),
@@ -28,6 +29,7 @@ contextBridge.exposeInMainWorld('miniclip', {
   sceneDetect: (filePath, opts) => ipcRenderer.invoke('miniclip:sceneDetect', filePath, opts),
   createProxy: (filePath) => ipcRenderer.invoke('miniclip:createProxy', filePath),
   createImageProxy: (payload) => ipcRenderer.invoke('miniclip:createImageProxy', payload),
+  createThumbnail: (payload) => ipcRenderer.invoke('miniclip:createThumbnail', payload),
   createFreezeFrame: (payload) => ipcRenderer.invoke('miniclip:createFreezeFrame', payload),
 
   // project persistence and crash recovery

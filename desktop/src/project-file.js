@@ -8,6 +8,8 @@
  * rules testable without Electron or filesystem access.
  */
 
+const mediaLibrary = require('./media-library-utils');
+
 const FORMAT = 'miniclip-project';
 const VERSION = 1;
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -270,6 +272,10 @@ function cleanMarkers(value) {
   }).sort((a, b) => a.time - b.time || a.id - b.id);
 }
 
+function cleanMediaAssets(value) {
+  return mediaLibrary.addOrReuseAssets([], array(value)).assets;
+}
+
 function outputProfile(value) {
   return ['720p', '1080p', '2k', '4k'].includes(value) ? value : '1080p';
 }
@@ -289,6 +295,7 @@ function normaliseProjectState(value) {
   }));
   return {
     clips: array(state.clips).map(cleanClip),
+    mediaAssets: cleanMediaAssets(state.mediaAssets),
     texts: array(state.texts).map(cleanText),
     overlays: array(state.overlays).map(cleanOverlay),
     brolls,

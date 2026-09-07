@@ -25,6 +25,7 @@
     <button id="btnRelinkMedia" class="btn hidden">重新链接素材</button>
     <button id="btnUndo" class="btn" disabled title="撤销 (Ctrl/⌘+Z)">↶ 撤销</button>
     <button id="btnRedo" class="btn" disabled title="重做 (Ctrl/⌘+Shift+Z)">↷ 重做</button>
+    <button id="btnToggleMediaLibrary" class="btn" title="显示或隐藏项目素材库">▦ 素材库</button>
     <button id="btnImport" class="btn btn-primary">＋ 导入媒体</button>
     <button id="btnInsertClip" class="btn" disabled title="在播放头插入视频">插入</button>
     <button id="btnOverwriteClip" class="btn" disabled title="用视频覆盖选中片段">覆盖</button>
@@ -39,6 +40,51 @@
   </header>
 
   <main class="workspace">
+    <aside id="mediaLibrary" class="media-library">
+      <div class="media-library-head">
+        <div>
+          <strong>项目素材</strong>
+          <div id="mediaLibraryCount" class="muted small">0 个素材</div>
+        </div>
+        <button id="btnCloseMediaLibrary" class="btn btn-small" title="隐藏素材库">×</button>
+      </div>
+      <button id="btnImportLibrary" class="btn btn-primary media-import">＋ 导入到素材库</button>
+      <div class="media-library-tools">
+        <input id="mediaLibrarySearch" type="text" placeholder="搜索素材…" aria-label="搜索素材" />
+        <select id="mediaLibraryFilter" aria-label="筛选素材类型">
+          <option value="all">全部</option>
+          <option value="video">视频</option>
+          <option value="image">图片</option>
+          <option value="audio">音频</option>
+        </select>
+        <select id="mediaLibrarySort" aria-label="素材排序">
+          <option value="added">导入顺序</option>
+          <option value="name">名称</option>
+          <option value="duration">时长</option>
+          <option value="type">类型</option>
+        </select>
+      </div>
+      <div id="mediaLibraryGrid" class="media-library-grid"></div>
+      <div id="mediaLibraryEmpty" class="media-library-empty">
+        导入视频、图片或音频后，可反复拖放或添加到时间线。
+      </div>
+      <div id="mediaLibraryActions" class="media-library-actions hidden">
+        <div id="mediaLibrarySelectedName" class="media-selected-name"></div>
+        <div class="row">
+          <button id="btnAppendAsset" class="btn btn-small btn-primary">追加主轨</button>
+          <button id="btnInsertAsset" class="btn btn-small">插入播放头</button>
+          <button id="btnOverwriteAsset" class="btn btn-small">覆盖片段</button>
+        </div>
+        <div class="row media-library-secondary-actions">
+          <button id="btnOverlayAsset" class="btn btn-small">作为叠加</button>
+          <button id="btnBrollAsset" class="btn btn-small">作为视频层</button>
+          <button id="btnAudioAsset" class="btn btn-small">加入音频轨</button>
+          <button id="btnBgmAsset" class="btn btn-small">设为背景音乐</button>
+        </div>
+        <div class="muted small media-drag-hint">也可拖到主视频、视频层、叠加或音频轨。</div>
+        <button id="btnRemoveAsset" class="btn btn-small btn-danger">移出素材库</button>
+      </div>
+    </aside>
     <!-- Left: preview + status -->
     <section class="stage">
       <div class="preview" id="previewBox">
@@ -743,6 +789,7 @@
   </section>
 
   <script src="timeline-utils.js"></script>
+  <script src="media-library-utils.js"></script>
   <script src="keyframe-utils.js"></script>
   <script src="clip-transform-utils.js"></script>
   <script src="clip-appearance.js"></script>

@@ -56,7 +56,9 @@ const context = {
       pickLut: async () => ({ canceled: true }),
       createProxy: async () => ({ ok: true, url: 'file:///proxy.mp4' }),
       createImageProxy: async () => ({ ok: true, url: 'file:///image-proxy.mp4' }),
+      createThumbnail: async () => ({ ok: true, url: 'file:///thumbnail.jpg' }),
       createFreezeFrame: async () => ({ ok: false, error: 'test' }),
+      pickMedia: async () => ({ canceled: true, items: [] }),
       relinkMedia: async () => ({ canceled: true }),
       renderPreview: async () => ({ ok: false, error: 'test' }),
       onPreviewProgress: () => () => {},
@@ -65,6 +67,7 @@ const context = {
 };
 context.globalThis = context;
 vm.runInNewContext(fs.readFileSync(path.join(src, 'timeline-utils.js'), 'utf8'), context, { filename: 'timeline-utils.js' });
+vm.runInNewContext(fs.readFileSync(path.join(src, 'media-library-utils.js'), 'utf8'), context, { filename: 'media-library-utils.js' });
 vm.runInNewContext(fs.readFileSync(path.join(src, 'overlay-export-utils.js'), 'utf8'), context, { filename: 'overlay-export-utils.js' });
 vm.runInNewContext(fs.readFileSync(path.join(src, 'renderer.js'), 'utf8'), context, { filename: 'renderer.js' });
 console.log(`renderer boot smoke: ${ids.size} DOM ids wired`);

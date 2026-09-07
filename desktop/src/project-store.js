@@ -4,6 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const mediaLibrary = require('./media-library-utils');
 const project = require('./project-file');
 
 function assertProjectPath(filePath) {
@@ -31,6 +32,7 @@ function readProject(filePath) {
   const base = path.dirname(resolved);
   const resolvePath = (p) => p && !path.isAbsolute(p) ? path.resolve(base, p) : p;
   parsed.state.clips.forEach((clip) => { clip.path = resolvePath(clip.path); if (clip.color) clip.color.lutPath = resolvePath(clip.color.lutPath); });
+  parsed.state.mediaAssets.forEach((asset) => { asset.path = resolvePath(asset.path); });
   parsed.state.overlays.forEach((overlay) => { overlay.path = resolvePath(overlay.path); });
   parsed.state.brolls.forEach((broll) => { broll.path = resolvePath(broll.path); });
   parsed.state.audioTracks.forEach((track) => { track.path = resolvePath(track.path); });
@@ -38,13 +40,27 @@ function readProject(filePath) {
   return Object.assign({ path: resolved }, parsed);
 }
 
+function referencedMediaItems(state) {
+  const refs = [];
+  for (const clip of state.clips || []) {
+    if (clip.path) refs.push({ path: clip.path, kind: clip.kind === 'image' ? 'image' : 'video', name: clip.name, duration: clip.sourceDuration, hasAudio: clip.hasAudio });
+  }
+  for (const overlay of state.overlays || []) if (overlay.path) refs.push({ path: overlay.path, kind: overlay.kind === 'video' ? 'video' : 'image', name: overlay.name, duration: Math.max(0, overlay.end - overlay.start), hasAudio: overlay.kind === 'video' });
+  for (const broll of state.brolls || []) if (broll.path) refs.push({ path: broll.path, kind: 'video', name: broll.name, duration: broll.duration, hasAudio: true });
+  for (const track of state.audioTracks || []) if (track.path) refs.push({ path: track.path, kind: 'audio', name: track.name, duration: track.duration, hasAudio: true });
+  if (state.bgm && state.bgm.path) refs.push({ path: state.bgm.path, kind: 'audio', name: state.bgm.name, duration: state.bgm.duration, hasAudio: true });
+  return refs;
+}
+
+function collectProjectMediaAssets(state) {
+  const normalized = project.normaliseProjectState(state);
+  return mediaLibrary.addOrReuseAssets(normalized.mediaAssets, referencedMediaItems(normalized)).assets;
+}
+
 function collectMediaPaths(state) {
   const paths = [];
   for (const clip of state.clips || []) { if (clip.path) paths.push(clip.path); if (clip.color && clip.color.lutPath) paths.push(clip.color.lutPath); }
-  for (const overlay of state.overlays || []) if (overlay.path) paths.push(overlay.path);
-  for (const broll of state.brolls || []) if (broll.path) paths.push(broll.path);
-  for (const track of state.audioTracks || []) if (track.path) paths.push(track.path);
-  if (state.bgm && state.bgm.path) paths.push(state.bgm.path);
+  for (const asset of collectProjectMediaAssets(state)) if (asset.path) paths.push(asset.path);
   return [...new Set(paths.map((p) => path.resolve(p)))];
 }
 
@@ -76,8 +92,10 @@ function packageProject(destinationDir, state, projectName = 'MiniClip-Project')
     map.set(source, path.join('media', name));
   }
   const packed = JSON.parse(JSON.stringify(normalized));
+  packed.mediaAssets = collectProjectMediaAssets(normalized);
   const rel = (p) => p && (map.get(path.resolve(p)) || p);
   packed.clips.forEach((clip) => { clip.path = rel(clip.path); if (clip.color && clip.color.lutPath) clip.color.lutPath = rel(clip.color.lutPath); });
+  packed.mediaAssets.forEach((asset) => { asset.path = rel(asset.path); });
   packed.overlays.forEach((overlay) => { overlay.path = rel(overlay.path); });
   packed.brolls.forEach((broll) => { broll.path = rel(broll.path); });
   packed.audioTracks.forEach((track) => { track.path = rel(track.path); });
@@ -102,4 +120,4 @@ function readRecovery(filePath) {
   }
 }
 
-module.exports = { assertProjectPath, writeProject, readProject, writeRecovery, readRecovery, collectMediaPaths, packageProject };
+module.exports = { assertProjectPath, writeProject, readProject, writeRecovery, readRecovery, referencedMediaItems, collectProjectMediaAssets, collectMediaPaths, packageProject };

@@ -20,6 +20,7 @@ const api = window.miniclip;
 const i18n = window.MiniClipI18n || { t: (value) => String(value), dynamic: (value) => String(value) };
 const $ = (id) => document.getElementById(id);
 const timeline = window.MiniClipTimeline;
+const mediaLibraryModel = window.MiniClipMediaLibrary || globalThis.MiniClipMediaLibrary;
 const keyframe = window.MiniClipKeyframes;
 const clipAppearance = window.MiniClipClipAppearance;
 const clipTransform = window.MiniClipClipTransform;
@@ -68,6 +69,8 @@ const SPEED_CURVE_PRESETS = {
 
 const waveformCache = new Map();
 const waveformLoading = new Set();
+const thumbnailCache = new Map();
+const thumbnailLoading = new Set();
 
 // ---------------------------------------------------------------------------
 // State
@@ -75,6 +78,7 @@ const waveformLoading = new Set();
 
 let seq = 0;
 const state = {
+  mediaAssets: [], // project media registry; timeline items remain independent edits
   clips: [],       // see makeClip()
   texts: [],       // { id, text, start, end, position, fontSize, color, outlineColor, fade }
   overlays: [],    // { id, path, url, kind, name, start, end, x, y, scale, opacity, fade, move, keyframes? }
@@ -104,6 +108,8 @@ const state = {
   selectedVideoTrackId: 'video-1',
   selectedAudioTrackId: null,
   selectedMarkerId: null,
+  selectedMediaAssetId: null,
+  mediaLibraryOpen: true,
   selectedKeyframeTime: null,
   exportedPath: null,
   projectPath: null,
@@ -154,6 +160,7 @@ function urlForLocalPath(filePath) {
 function restoreProjectState(saved) {
   const data = saved || {};
   Object.assign(state, data, {
+    mediaAssets: (data.mediaAssets || []).map((asset) => Object.assign({}, asset, { url: urlForLocalPath(asset.path) })),
     clips: (data.clips || []).map((clip) => {
       const restored = Object.assign({}, clip, { url: urlForLocalPath(clip.path), proxyUrl: '' });
       createProxyForClip(restored);
@@ -163,17 +170,18 @@ function restoreProjectState(saved) {
     brolls: (data.brolls || []).map((broll) => Object.assign({}, broll, { url: urlForLocalPath(broll.path) })),
     videoTracks: data.videoTracks || [{ id: 'video-1', name: '视频层 1', visible: true, locked: false }],
     audioTracks: data.audioTracks || [], markers: data.markers || [], snapEnabled: data.snapEnabled !== false,
-    selectedClipId: null, selectedTextId: null, selectedOverlayId: null, selectedBrollId: null, selectedVideoTrackId: data.selectedVideoTrackId || 'video-1', selectedAudioTrackId: null, selectedMarkerId: null, selectedKeyframeTime: null,
+    selectedClipId: null, selectedTextId: null, selectedOverlayId: null, selectedBrollId: null, selectedVideoTrackId: data.selectedVideoTrackId || 'video-1', selectedAudioTrackId: null, selectedMarkerId: null, selectedMediaAssetId: null, selectedKeyframeTime: null,
     exportedPath: null,
   });
   undoStack.length = 0;
   redoStack.length = 0;
+  registerReferencedMediaAssets();
   normalizeSelections();
 }
 
 function snapshot() {
   return JSON.stringify({
-    clips: state.clips, texts: state.texts, overlays: state.overlays, brolls: state.brolls, videoTracks: state.videoTracks, selectedVideoTrackId: state.selectedVideoTrackId, audioTracks: state.audioTracks, markers: state.markers,
+    mediaAssets: state.mediaAssets, clips: state.clips, texts: state.texts, overlays: state.overlays, brolls: state.brolls, videoTracks: state.videoTracks, selectedVideoTrackId: state.selectedVideoTrackId, audioTracks: state.audioTracks, markers: state.markers,
     bgm: state.bgm, originalVolume: state.originalVolume, bgmVolume: state.bgmVolume,
     bgmDuck: state.bgmDuck, bgmDuckAmount: state.bgmDuckAmount, loudnessNormalize: state.loudnessNormalize, videoTrackLocked: state.videoTrackLocked, trackControls: state.trackControls, exportPreset: state.exportPreset,
     aspect: state.aspect, fillMode: state.fillMode, canvasColor: state.canvasColor, outputProfile: state.outputProfile, frameRate: state.frameRate, snapEnabled: state.snapEnabled,
@@ -185,7 +193,7 @@ function applySnapshot(s) {
   normalizeSelections();
 }
 function ensureSeqAboveExistingIds() {
-  const all = state.clips.concat(state.texts, state.overlays, state.brolls, state.audioTracks, state.markers);
+  const all = state.mediaAssets.concat(state.clips, state.texts, state.overlays, state.brolls, state.audioTracks, state.markers);
   seq = Math.max(seq, ...all.map((x) => Number(x.id) || 0), 0);
 }
 function normalizeSelections() {
@@ -196,6 +204,7 @@ function normalizeSelections() {
   if (!findBroll(state.selectedBrollId)) state.selectedBrollId = state.brolls[0] ? state.brolls[0].id : null;
   if (!findAudioTrack(state.selectedAudioTrackId)) state.selectedAudioTrackId = state.audioTracks[0] ? state.audioTracks[0].id : null;
   if (!(state.markers || []).some((marker) => marker.id === state.selectedMarkerId)) state.selectedMarkerId = null;
+  if (!(state.mediaAssets || []).some((asset) => asset.id === state.selectedMediaAssetId)) state.selectedMediaAssetId = null;
 }
 function recordUndo() {
   if (accuratePreviewMode) accuratePreviewDirty = true;
@@ -273,6 +282,7 @@ function outputDimensions(aspect = state.aspect, profile = state.outputProfile) 
 const els = {
   openProject: $('btnOpenProject'), saveProject: $('btnSaveProject'), packageProject: $('btnPackageProject'), relinkMedia: $('btnRelinkMedia'),
   undo: $('btnUndo'), redo: $('btnRedo'), import: $('btnImport'), insertClip: $('btnInsertClip'), overwriteClip: $('btnOverwriteClip'), rippleDelete: $('btnRippleDelete'), extractAudio: $('btnExtractAudio'), exportPreset: $('exportPreset'), export: $('btnExport'),
+  toggleMediaLibrary: $('btnToggleMediaLibrary'), mediaLibrary: $('mediaLibrary'), closeMediaLibrary: $('btnCloseMediaLibrary'), importLibrary: $('btnImportLibrary'), mediaLibrarySearch: $('mediaLibrarySearch'), mediaLibraryFilter: $('mediaLibraryFilter'), mediaLibrarySort: $('mediaLibrarySort'), mediaLibraryGrid: $('mediaLibraryGrid'), mediaLibraryEmpty: $('mediaLibraryEmpty'), mediaLibraryCount: $('mediaLibraryCount'), mediaLibraryActions: $('mediaLibraryActions'), mediaLibrarySelectedName: $('mediaLibrarySelectedName'), appendAsset: $('btnAppendAsset'), insertAsset: $('btnInsertAsset'), overwriteAsset: $('btnOverwriteAsset'), overlayAsset: $('btnOverlayAsset'), brollAsset: $('btnBrollAsset'), audioAsset: $('btnAudioAsset'), bgmAsset: $('btnBgmAsset'), removeAsset: $('btnRemoveAsset'),
   preview: $('previewBox'), canvas: $('previewCanvas'), player: $('player'),
   textLayer: $('textLayer'), brollLayer: $('brollLayer'), overlayLayer: $('overlayLayer'), transformLayer: $('transformLayer'),
   previewEmpty: $('previewEmpty'), play: $('btnPlay'), renderPreview: $('btnRenderPreview'), timeLabel: $('timeLabel'),
@@ -446,6 +456,7 @@ async function finishVoiceRecording() {
     const res = await api.saveRecording({ data, mimeType: blob.type });
     if (!res || !res.ok) throw new Error((res && res.error) || '保存录音失败');
     recordUndo();
+    registerMediaItems([Object.assign({}, res, { kind: 'audio', hasAudio: true })]);
     const track = audioTrackFromMedia(res, voiceInsertAt, '旁白 ' + new Date(startedAt).toLocaleTimeString());
     state.audioTracks.push(track);
     state.selectedAudioTrackId = track.id;
@@ -470,7 +481,7 @@ function stopVoiceRecording() {
 }
 
 function hasEditableContent() {
-  return state.clips.length > 0 || state.texts.length > 0 || state.overlays.length > 0 || state.brolls.length > 0 || state.audioTracks.length > 0 || state.markers.length > 0 || !!state.bgm;
+  return state.mediaAssets.length > 0 || state.clips.length > 0 || state.texts.length > 0 || state.overlays.length > 0 || state.brolls.length > 0 || state.audioTracks.length > 0 || state.markers.length > 0 || !!state.bgm;
 }
 function scheduleRecovery() {
   if (!api.saveRecovery) return;
@@ -527,6 +538,208 @@ function selectedKeyframe(o) {
 // Import
 // ---------------------------------------------------------------------------
 
+function mediaAssetForPath(filePath) {
+  const key = mediaLibraryModel.assetKey(filePath);
+  return state.mediaAssets.find((asset) => mediaLibraryModel.assetKey(asset) === key) || null;
+}
+
+function registerMediaItems(items) {
+  const registered = [];
+  for (const item of items || []) {
+    if (!item || item.error || !item.path || !['video', 'image', 'audio'].includes(item.kind)) continue;
+    let asset = mediaAssetForPath(item.path);
+    if (!asset) {
+      asset = {
+        id: ++seq, path: item.path, url: item.url || urlForLocalPath(item.path),
+        name: item.name || item.path.split(/[\/]/).pop(), kind: item.kind,
+        duration: Math.max(0.1, Number(item.duration) || (item.kind === 'image' ? 3 : 0.1)),
+        hasAudio: !!item.hasAudio, width: Math.max(0, Number(item.width) || 0), height: Math.max(0, Number(item.height) || 0),
+      };
+      state.mediaAssets.push(asset);
+    } else {
+      asset.url = item.url || asset.url || urlForLocalPath(asset.path);
+      asset.name = item.name || asset.name;
+      asset.kind = item.kind || asset.kind;
+      asset.duration = Math.max(0.1, Number(item.duration) || asset.duration || 0.1);
+      asset.hasAudio = !!item.hasAudio;
+      asset.width = Math.max(0, Number(item.width) || asset.width || 0);
+      asset.height = Math.max(0, Number(item.height) || asset.height || 0);
+    }
+    registered.push(asset);
+  }
+  return registered;
+}
+
+function registerReferencedMediaAssets() {
+  ensureSeqAboveExistingIds();
+  const items = [];
+  state.clips.forEach((clip) => items.push({ path: clip.path, name: clip.name, kind: clip.kind || 'video', duration: clip.sourceDuration, hasAudio: clip.hasAudio }));
+  state.overlays.forEach((overlay) => items.push({ path: overlay.path, name: overlay.name, kind: overlay.kind || 'image', duration: Math.max(0.1, Number(overlay.end) - Number(overlay.start)), hasAudio: false }));
+  state.brolls.forEach((broll) => items.push({ path: broll.path, name: broll.name, kind: 'video', duration: broll.duration, hasAudio: !!broll.hasAudio }));
+  state.audioTracks.forEach((track) => items.push({ path: track.path, name: track.name, kind: 'audio', duration: track.duration, hasAudio: true }));
+  if (state.bgm) items.push({ path: state.bgm.path, name: state.bgm.name, kind: 'audio', duration: state.bgm.duration, hasAudio: true });
+  registerMediaItems(items);
+}
+
+function mediaAssetUsage(asset) {
+  if (!asset) return 0;
+  const key = mediaLibraryModel.assetKey(asset);
+  const matches = (item) => mediaLibraryModel.assetKey(item) === key;
+  return state.clips.filter(matches).length
+    + state.overlays.filter(matches).length
+    + state.brolls.filter(matches).length
+    + state.audioTracks.filter(matches).length
+    + (state.bgm && matches(state.bgm) ? 1 : 0);
+}
+
+function clipFromMediaAsset(asset) {
+  const clip = makeClip({ path: asset.path, url: asset.url || urlForLocalPath(asset.path), name: asset.name, kind: asset.kind, duration: asset.duration, hasAudio: asset.hasAudio });
+  createProxyForClip(clip);
+  return clip;
+}
+
+async function importToMediaLibrary() {
+  const res = await (api.pickMedia ? api.pickMedia() : api.pickVideos());
+  if (res.canceled || !res.items.length) return;
+  const before = state.mediaAssets.length;
+  recordUndo();
+  const registered = registerMediaItems(res.items);
+  if (!registered.length) { undoStack.pop(); setStatus('没有可加入素材库的媒体'); return; }
+  state.selectedMediaAssetId = registered[registered.length - 1].id;
+  state.mediaLibraryOpen = true;
+  setStatus('素材库新增 ' + (state.mediaAssets.length - before) + ' 个素材');
+  renderAll();
+}
+
+function appendSelectedMediaAsset() {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  if (!asset || asset.kind === 'audio' || !ensureVideoTrackEditable()) return;
+  recordUndo();
+  const clip = clipFromMediaAsset(asset);
+  state.clips.push(clip);
+  activateTimelineItem('clip', clip.id);
+  setStatus('已从素材库追加：' + asset.name);
+  renderAll();
+}
+
+function insertSelectedMediaAsset() {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  if (!asset || asset.kind === 'audio' || !ensureVideoTrackEditable()) return;
+  insertMainClipsAtPlayhead([clipFromMediaAsset(asset)], '已从素材库插入 ');
+}
+
+function insertMediaAssetAt(asset, at) {
+  if (!asset || asset.kind === 'audio' || !ensureVideoTrackEditable()) return false;
+  const previousPlayhead = playheadTime;
+  playheadTime = Math.max(0, Math.min(totalDuration(), Number(at) || 0));
+  const inserted = insertMainClipsAtPlayhead([clipFromMediaAsset(asset)], '已从素材库插入 ');
+  if (!inserted) playheadTime = previousPlayhead;
+  return inserted;
+}
+
+function overwriteWithMediaAsset() {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  const target = findClip(state.selectedClipId);
+  if (!asset || asset.kind === 'audio' || !target || !ensureVideoTrackEditable()) { if (!target) setStatus('请先选择要覆盖的主视频片段'); return; }
+  const replacement = clipFromMediaAsset(asset);
+  const index = state.clips.findIndex((clip) => clip.id === target.id);
+  const at = clipStartOnTimeline(target.id);
+  const oldDuration = effDur(target);
+  replacement.transitionToNext = target.transitionToNext;
+  recordUndo();
+  state.clips.splice(index, 1, replacement);
+  rippleShiftAfter(at + oldDuration, effDur(replacement) - oldDuration);
+  activateTimelineItem('clip', replacement.id);
+  setStatus('已用素材库素材覆盖：' + asset.name);
+  renderAll();
+}
+
+function overlayFromMediaAsset(asset, at = playheadTime) {
+  const start = Math.max(0, Math.min(totalDuration(), Number(at) || 0));
+  const available = asset.kind === 'video' ? Math.max(0.1, Number(asset.duration) || 3) : 3;
+  return {
+    id: ++seq, path: asset.path, url: asset.url || urlForLocalPath(asset.path), kind: asset.kind, name: asset.name,
+    start, end: Math.min(totalDuration() || start + available, start + available),
+    x: 40, y: 40, scale: 0.4, opacity: 1, rotation: 0, fade: 0,
+    mirrorX: false, mirrorY: false, crop: { left: 0, right: 0, top: 0, bottom: 0 },
+    mask: 'none', maskInvert: false, maskFeather: 0, chromaKey: { enabled: false, color: '#00ff00', similarity: 0.1, blend: 0 }, blendMode: 'normal',
+    move: null, _w: asset.width || 0, _h: asset.height || 0,
+  };
+}
+
+function addSelectedMediaAsOverlay(at = playheadTime) {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  if (!asset || asset.kind === 'audio' || state.trackControls.overlayLocked) return false;
+  recordUndo();
+  const overlay = overlayFromMediaAsset(asset, at);
+  state.overlays.push(overlay);
+  activateTimelineItem('overlay', overlay.id);
+  switchTab('overlay');
+  setStatus('已从素材库添加叠加：' + asset.name);
+  renderAll();
+  return true;
+}
+
+function brollFromMediaAsset(asset, at = playheadTime, trackId = state.selectedVideoTrackId) {
+  const start = Math.max(0, Math.min(totalDuration(), Number(at) || 0));
+  const duration = Math.max(0.1, Number(asset.duration) || 3);
+  return {
+    id: ++seq, path: asset.path, url: asset.url || urlForLocalPath(asset.path), name: asset.name, duration,
+    trackId: trackId || 'video-1', start, end: start + duration, trimStart: 0, loop: true, x: 0, y: 0, scale: 1, opacity: 1, rotation: 0, fade: 0,
+  };
+}
+
+function addSelectedMediaAsBroll(at = playheadTime, trackId = state.selectedVideoTrackId) {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  const videoTrack = findVideoTrack(trackId) || findVideoTrack(state.selectedVideoTrackId);
+  if (!asset || asset.kind !== 'video' || state.trackControls.brollLocked || (videoTrack && videoTrack.locked)) return false;
+  recordUndo();
+  const broll = brollFromMediaAsset(asset, at, videoTrack && videoTrack.id);
+  state.brolls.push(broll);
+  state.selectedVideoTrackId = broll.trackId;
+  activateTimelineItem('broll', broll.id);
+  switchTab('broll');
+  setStatus('已从素材库添加视频层：' + asset.name);
+  renderAll();
+  return true;
+}
+
+function addSelectedMediaAsAudio(at = playheadTime) {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  if (!asset || asset.kind !== 'audio' || state.trackControls.audioLocked) return false;
+  recordUndo();
+  const start = Math.max(0, Math.min(totalDuration(), Number(at) || 0));
+  const track = audioTrackFromMedia(asset, start);
+  state.audioTracks.push(track);
+  activateTimelineItem('audio', track.id);
+  switchTab('audio');
+  setStatus('已从素材库添加音频：' + asset.name);
+  renderAll();
+  return true;
+}
+
+function setSelectedMediaAsBgm() {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  if (!asset || asset.kind !== 'audio') return false;
+  recordUndo();
+  state.bgm = { path: asset.path, name: asset.name, duration: asset.duration, trimStart: 0, fadeIn: 0, fadeOut: 0 };
+  switchTab('audio');
+  setStatus('已将素材设为背景音乐：' + asset.name);
+  renderAll();
+  return true;
+}
+
+function removeSelectedMediaAsset() {
+  const asset = state.mediaAssets.find((item) => item.id === state.selectedMediaAssetId);
+  if (!asset) return;
+  if (mediaAssetUsage(asset) > 0) { setStatus('素材正在时间线中使用，不能移出素材库'); return; }
+  recordUndo();
+  state.mediaAssets = state.mediaAssets.filter((item) => item.id !== asset.id);
+  state.selectedMediaAssetId = null;
+  setStatus('已从素材库移除：' + asset.name);
+  renderAll();
+}
+
 async function importVideos() {
   const res = await api.pickVideos();
   if (res.canceled || !res.items.length) return;
@@ -535,6 +748,7 @@ async function importVideos() {
   const errs = [];
   for (const item of res.items) {
     if (item.error) { errs.push(`${item.name}: ${item.error}`); continue; }
+    registerMediaItems([item]);
     state.clips.push(makeClip(item));
     createProxyForClip(state.clips[state.clips.length - 1]);
     added++;
@@ -600,6 +814,7 @@ async function openProject() {
 
 function mediaReferencesForPath(path) {
   const refs = [];
+  state.mediaAssets.forEach((item) => { if (item.path === path) refs.push({ kind: item.kind, item }); });
   state.clips.forEach((item) => { if (item.path === path) refs.push({ kind: item.kind === 'image' ? 'image' : 'video', item }); });
   state.brolls.forEach((item) => { if (item.path === path) refs.push({ kind: 'video', item }); });
   state.overlays.forEach((item) => { if (item.path === path) refs.push({ kind: item.kind === 'image' ? 'image' : 'video', item }); });
@@ -630,6 +845,12 @@ async function relinkMissingMedia() {
       createProxyForClip(ref.item);
     }
     if (ref.kind === 'image' && ref.item.kind === 'image') createProxyForClip(ref.item);
+    if (state.mediaAssets.includes(ref.item)) {
+      ref.item.url = res.url || urlForLocalPath(res.path);
+      ref.item.duration = res.duration || ref.item.duration;
+      ref.item.width = res.width || ref.item.width; ref.item.height = res.height || ref.item.height;
+      ref.item.hasAudio = !!res.hasAudio;
+    }
     if (ref.kind === 'audio' && res.duration > 0) ref.item.duration = res.duration;
   });
   state.missingMedia.shift();
@@ -649,7 +870,7 @@ async function restoreRecovery() {
 }
 
 function hasRestorableContent(saved) {
-  return !!saved && ((saved.clips && saved.clips.length) || (saved.texts && saved.texts.length) || (saved.overlays && saved.overlays.length) || (saved.brolls && saved.brolls.length) || (saved.audioTracks && saved.audioTracks.length) || saved.bgm);
+  return !!saved && ((saved.mediaAssets && saved.mediaAssets.length) || (saved.clips && saved.clips.length) || (saved.texts && saved.texts.length) || (saved.overlays && saved.overlays.length) || (saved.brolls && saved.brolls.length) || (saved.audioTracks && saved.audioTracks.length) || saved.bgm);
 }
 
 async function pickMusic() {
@@ -657,6 +878,7 @@ async function pickMusic() {
   if (res.canceled) return;
   if (res.error) { setStatus('音乐读取失败：' + res.error); return; }
   recordUndo();
+  registerMediaItems([Object.assign({}, res, { kind: 'audio', hasAudio: true })]);
   state.bgm = { path: res.path, name: res.name, duration: res.duration, trimStart: 0, fadeIn: 0, fadeOut: 0 };
   setStatus('已添加背景音乐：' + res.name);
   renderAll();
@@ -667,6 +889,7 @@ async function addAudioTrack() {
   if (res.canceled) return;
   if (res.error) { setStatus('音频读取失败：' + res.error); return; }
   recordUndo();
+  registerMediaItems([Object.assign({}, res, { kind: 'audio', hasAudio: true })]);
   const total = totalDuration();
   const start = Math.max(0, Math.min(total, playheadTime));
   const track = audioTrackFromMedia(res, start);
@@ -688,6 +911,7 @@ async function addOverlay() {
   const res = await api.pickOverlayMedia();
   if (res.canceled) return;
   recordUndo();
+  registerMediaItems([res]);
   const ov = {
     id: ++seq, path: res.path, url: res.url, kind: res.kind, name: res.name,
     start: 0, end: Math.min(3, totalDuration() || 3),
@@ -709,6 +933,7 @@ async function addBroll() {
   if (res.canceled) return;
   if (res.kind !== 'video') { setStatus('视频层只接受视频素材'); return; }
   recordUndo();
+  registerMediaItems([res]);
   const start = Math.max(0, Math.min(totalDuration(), playheadTime));
   const duration = Math.max(0.1, Number(res.duration) || 3);
   const broll = {
@@ -1214,6 +1439,7 @@ async function createFreezeFrameAtPlayhead() {
     const res = await api.createFreezeFrame({ input: clip.path, sourceTime, duration: requestedDuration });
     if (!res || !res.ok) throw new Error((res && res.error) || '生成定格帧失败');
     const frozen = makeClip(res);
+    registerMediaItems([Object.assign({}, res, { kind: 'video' })]);
     frozen.name = (clip.name || '片段') + ' · 定格帧';
     frozen.hasAudio = false;
     // The extracted frame is raw source media. Keep the original clip's visual
@@ -1307,6 +1533,7 @@ async function insertClipAtSelection() {
   if (res.canceled || !res.items.length) return;
   const valid = res.items.filter((item) => !item.error).map(makeClip);
   if (!valid.length) { setStatus('没有可插入的视频素材'); return; }
+  registerMediaItems(res.items);
   insertMainClipsAtPlayhead(valid);
 }
 
@@ -1316,6 +1543,7 @@ async function overwriteSelectedClip() {
   if (!target) { setStatus('请先选择要覆盖的主视频片段'); return; }
   const res = await api.pickVideos();
   if (res.canceled || !res.items.length || res.items[0].error) return;
+  registerMediaItems([res.items[0]]);
   const replacement = makeClip(res.items[0]);
   const index = state.clips.findIndex((clip) => clip.id === target.id);
   const at = clipStartOnTimeline(target.id);
@@ -1614,6 +1842,7 @@ let exporting = false;
 
 function renderAll() {
   playheadTime = Math.max(0, Math.min(totalDuration(), playheadTime));
+  renderMediaLibrary();
   renderCanvas();
   renderTimeline();
   renderClipInspector();
@@ -1660,7 +1889,107 @@ function renderCanvas() {
   els.canvas.style.backgroundColor = state.canvasColor || '#000000';
 }
 
+function renderMediaLibrary() {
+  els.mediaLibrary.classList.toggle('hidden', !state.mediaLibraryOpen);
+  els.toggleMediaLibrary.classList.toggle('is-active', !!state.mediaLibraryOpen);
+  const assets = mediaLibraryModel.visibleAssets(state.mediaAssets, {
+    query: els.mediaLibrarySearch.value,
+    kind: els.mediaLibraryFilter.value,
+    sort: els.mediaLibrarySort.value,
+  });
+  els.mediaLibraryCount.textContent = assets.length === state.mediaAssets.length
+    ? state.mediaAssets.length + ' 个素材'
+    : state.mediaAssets.length + ' 个素材 · 显示 ' + assets.length + ' 个';
+  els.mediaLibraryGrid.innerHTML = '';
+  assets.forEach((asset) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.draggable = true;
+    card.dataset.assetId = String(asset.id);
+    card.className = 'media-asset' + (asset.id === state.selectedMediaAssetId ? ' active' : '');
+    card.title = asset.name + ' · ' + asset.path;
+    card.addEventListener('click', () => { state.selectedMediaAssetId = asset.id; renderMediaLibrary(); });
+    card.addEventListener('dblclick', () => {
+      state.selectedMediaAssetId = asset.id;
+      if (asset.kind === 'audio') addSelectedMediaAsAudio();
+      else appendSelectedMediaAsset();
+    });
+    card.addEventListener('dragstart', (event) => {
+      draggedMediaAssetId = asset.id;
+      card.classList.add('dragging');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'copy';
+        event.dataTransfer.setData('application/x-miniclip-media-asset', String(asset.id));
+      }
+    });
+    card.addEventListener('dragend', () => { draggedMediaAssetId = null; card.classList.remove('dragging'); clearMediaDropTargets(); });
+    const thumbnailReady = asset.kind === 'video' && thumbnailCache.has(asset.path);
+    const cachedThumbnail = thumbnailReady ? thumbnailCache.get(asset.path) : null;
+    const thumb = document.createElement(asset.kind === 'audio' || (thumbnailReady && !cachedThumbnail) ? 'div' : 'img');
+    thumb.className = 'media-asset-thumb';
+    if (asset.kind === 'audio') {
+      thumb.classList.add('media-asset-audio');
+      thumb.textContent = '♫';
+      thumb.appendChild(buildWaveformNode(asset.path));
+    } else if (asset.kind === 'video') {
+      if (cachedThumbnail) thumb.src = cachedThumbnail;
+      else if (thumbnailReady) {
+        thumb.classList.add('media-asset-thumb-unavailable');
+        thumb.textContent = '▣';
+      } else {
+        thumb.classList.add('media-asset-thumb-loading');
+        ensureMediaThumbnail(asset);
+      }
+    } else {
+      thumb.src = asset.url || urlForLocalPath(asset.path);
+    }
+    const kind = document.createElement('span'); kind.className = 'media-asset-kind'; kind.textContent = asset.kind === 'image' ? '图片' : (asset.kind === 'audio' ? '音频' : '视频');
+    const name = document.createElement('div'); name.className = 'media-asset-name'; name.textContent = asset.name;
+    const meta = document.createElement('div'); meta.className = 'media-asset-meta';
+    const dimensions = asset.width && asset.height ? asset.width + '×' + asset.height : '';
+    meta.textContent = (asset.duration || 0).toFixed(1) + 's' + (dimensions ? ' · ' + dimensions : '') + ' · 使用 ' + mediaAssetUsage(asset);
+    card.append(thumb, kind, name, meta);
+    els.mediaLibraryGrid.appendChild(card);
+  });
+  const selected = assets.find((asset) => asset.id === state.selectedMediaAssetId);
+  els.mediaLibraryEmpty.classList.toggle('hidden', assets.length > 0);
+  els.mediaLibraryEmpty.textContent = state.mediaAssets.length ? '没有匹配的素材。' : '导入视频、图片或音频后，可反复拖放或添加到时间线。';
+  els.mediaLibraryActions.classList.toggle('hidden', !selected);
+  els.mediaLibrarySelectedName.textContent = selected ? selected.name : '';
+  const visual = !!selected && selected.kind !== 'audio';
+  const video = !!selected && selected.kind === 'video';
+  const audio = !!selected && selected.kind === 'audio';
+  els.appendAsset.classList.toggle('hidden', !visual);
+  els.insertAsset.classList.toggle('hidden', !visual);
+  els.overwriteAsset.classList.toggle('hidden', !visual);
+  els.overlayAsset.classList.toggle('hidden', !visual);
+  els.brollAsset.classList.toggle('hidden', !video);
+  els.audioAsset.classList.toggle('hidden', !audio);
+  els.bgmAsset.classList.toggle('hidden', !audio);
+  els.appendAsset.disabled = !visual || state.videoTrackLocked;
+  els.overwriteAsset.disabled = !visual || !state.selectedClipId || state.videoTrackLocked;
+  els.insertAsset.disabled = !visual || state.videoTrackLocked;
+  els.overlayAsset.disabled = !visual || state.trackControls.overlayLocked;
+  const selectedVideoTrack = findVideoTrack(state.selectedVideoTrackId);
+  els.brollAsset.disabled = !video || state.trackControls.brollLocked || !!(selectedVideoTrack && selectedVideoTrack.locked);
+  els.audioAsset.disabled = !audio || state.trackControls.audioLocked;
+  els.bgmAsset.disabled = !audio;
+  els.removeAsset.disabled = !selected || mediaAssetUsage(selected) > 0;
+}
+
+function ensureMediaThumbnail(asset) {
+  if (!asset || asset.kind !== 'video' || !asset.path || !api.createThumbnail || thumbnailCache.has(asset.path) || thumbnailLoading.has(asset.path)) return;
+  thumbnailLoading.add(asset.path);
+  api.createThumbnail({ path: asset.path, seconds: Math.min(0.2, Math.max(0, Number(asset.duration) || 0) / 2) }).then((res) => {
+    thumbnailCache.set(asset.path, res && res.ok && res.url ? res.url : null);
+  }).catch(() => { thumbnailCache.set(asset.path, null); }).finally(() => {
+    thumbnailLoading.delete(asset.path);
+    if (state.mediaLibraryOpen) renderMediaLibrary();
+  });
+}
+
 let draggingId = null;
+let draggedMediaAssetId = null;
 let clipTrimEdit = null;
 let inspectorTrimEdit = null;
 let playheadTime = 0;
@@ -1872,6 +2201,45 @@ function timelineTimeFromPointer(event) {
   const rect = els.timelineTrack.getBoundingClientRect();
   const x = event.clientX - rect.left - TIMELINE_LABEL_WIDTH;
   return Math.max(0, Math.min(totalDuration(), x / pixelsPerSecond));
+}
+
+function draggedMediaAsset(event) {
+  let id = draggedMediaAssetId;
+  if (event && event.dataTransfer) {
+    const transferred = Number(event.dataTransfer.getData('application/x-miniclip-media-asset'));
+    if (Number.isFinite(transferred) && transferred > 0) id = transferred;
+  }
+  return state.mediaAssets.find((asset) => asset.id === id) || null;
+}
+
+function clearMediaDropTargets() {
+  document.querySelectorAll('.media-drop-target').forEach((node) => node.classList.remove('media-drop-target'));
+}
+
+function setupMediaDropTarget(element, accepts, onDrop) {
+  if (!element || element.dataset.mediaDropWired === 'true') return;
+  element.dataset.mediaDropWired = 'true';
+  element.addEventListener('dragover', (event) => {
+    const asset = draggedMediaAsset(event);
+    if (!asset || !accepts(asset)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    clearMediaDropTargets();
+    element.classList.add('media-drop-target');
+  });
+  element.addEventListener('dragleave', (event) => {
+    if (!event.relatedTarget || !element.contains(event.relatedTarget)) element.classList.remove('media-drop-target');
+  });
+  element.addEventListener('drop', (event) => {
+    const asset = draggedMediaAsset(event);
+    if (!asset || !accepts(asset)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    state.selectedMediaAssetId = asset.id;
+    const at = timelineTimeFromPointer(event);
+    clearMediaDropTargets();
+    onDrop(asset, at);
+  });
 }
 
 let draggingPlayhead = false;
@@ -2174,9 +2542,9 @@ function renderTimeline() {
     card.addEventListener('click', (event) => { event.stopPropagation(); selectClip(clip.id); seekTimelineTime(start + duration / 2, false); });
     card.addEventListener('dragstart', (e) => { draggingId = clip.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
     card.addEventListener('dragend', () => { draggingId = null; card.classList.remove('dragging'); document.querySelectorAll('.card.drop-target').forEach((n) => n.classList.remove('drop-target')); });
-    card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drop-target'); });
+    card.addEventListener('dragover', (e) => { if (draggingId == null) return; e.preventDefault(); card.classList.add('drop-target'); });
     card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
-    card.addEventListener('drop', (e) => { e.preventDefault(); card.classList.remove('drop-target'); if (draggingId != null) reorderTo(draggingId, clip.id); });
+    card.addEventListener('drop', (e) => { if (draggingId == null) return; e.preventDefault(); e.stopPropagation(); card.classList.remove('drop-target'); reorderTo(draggingId, clip.id); });
     const trimStart = document.createElement('span');
     trimStart.className = 'clip-trim-handle start';
     trimStart.title = '拖动裁剪片段起点';
@@ -2696,7 +3064,8 @@ function buildWaveformNode(filePath) {
       waveformLoading.add(filePath);
       api.waveform(filePath, 96).then((res) => {
         if (res && res.ok && Array.isArray(res.peaks)) waveformCache.set(filePath, res.peaks);
-      }).catch(() => {}).finally(() => { waveformLoading.delete(filePath); renderAudioTimeline(); });
+        else waveformCache.set(filePath, []);
+      }).catch(() => { waveformCache.set(filePath, []); }).finally(() => { waveformLoading.delete(filePath); renderAudioTimeline(); if (state.mediaLibraryOpen) renderMediaLibrary(); });
     }
   }
   return node;
@@ -2733,6 +3102,7 @@ function renderSecondaryTimelineTracks() {
   for (const track of state.videoTracks) {
     const lane = document.createElement('div');
     lane.className = 'nested-video-lane' + (track.visible === false ? ' hidden-track' : '');
+    setupMediaDropTarget(lane, (asset) => asset.kind === 'video', (_asset, at) => addSelectedMediaAsBroll(at, track.id));
     const label = document.createElement('span'); label.className = 'nested-video-label'; label.textContent = track.name + (track.locked ? ' 🔒' : ''); lane.appendChild(label);
     renderTimedLane(lane, track.visible === false ? [] : state.brolls.filter((broll) => broll.trackId === track.id), {
       type: 'broll', className: 'broll-card',
@@ -3379,10 +3749,27 @@ els.saveProject.addEventListener('click', saveProject);
 els.packageProject.addEventListener('click', packageProject);
 els.relinkMedia.addEventListener('click', relinkMissingMedia);
 els.import.addEventListener('click', importVideos);
+els.toggleMediaLibrary.addEventListener('click', () => { state.mediaLibraryOpen = !state.mediaLibraryOpen; renderMediaLibrary(); });
+els.closeMediaLibrary.addEventListener('click', () => { state.mediaLibraryOpen = false; renderMediaLibrary(); });
+els.importLibrary.addEventListener('click', importToMediaLibrary);
+els.mediaLibrarySearch.addEventListener('input', renderMediaLibrary);
+els.mediaLibraryFilter.addEventListener('change', renderMediaLibrary);
+els.mediaLibrarySort.addEventListener('change', renderMediaLibrary);
+els.appendAsset.addEventListener('click', appendSelectedMediaAsset);
+els.insertAsset.addEventListener('click', insertSelectedMediaAsset);
+els.overwriteAsset.addEventListener('click', overwriteWithMediaAsset);
+els.overlayAsset.addEventListener('click', () => addSelectedMediaAsOverlay());
+els.brollAsset.addEventListener('click', () => addSelectedMediaAsBroll());
+els.audioAsset.addEventListener('click', () => addSelectedMediaAsAudio());
+els.bgmAsset.addEventListener('click', setSelectedMediaAsBgm);
+els.removeAsset.addEventListener('click', removeSelectedMediaAsset);
 els.insertClip.addEventListener('click', insertClipAtSelection);
 els.overwriteClip.addEventListener('click', overwriteSelectedClip);
 els.rippleDelete.addEventListener('click', rippleDeleteSelectedClip);
 els.extractAudio.addEventListener('click', extractAudioFromSelectedClip);
+setupMediaDropTarget(els.videoTrackLane, (asset) => asset.kind !== 'audio', (asset, at) => insertMediaAssetAt(asset, at));
+setupMediaDropTarget(els.overlayTrackLane, (asset) => asset.kind !== 'audio', (_asset, at) => addSelectedMediaAsOverlay(at));
+setupMediaDropTarget(els.audioTrackLane, (asset) => asset.kind === 'audio', (_asset, at) => addSelectedMediaAsAudio(at));
 els.exportPreset.addEventListener('change', () => { recordUndo(); state.exportPreset = els.exportPreset.value; });
 els.lockVideoTrack.addEventListener('click', () => { recordUndo(); state.videoTrackLocked = !state.videoTrackLocked; renderAll(); });
 els.toggleBroll.addEventListener('click', () => { recordUndo(); state.trackControls.brollVisible = !state.trackControls.brollVisible; renderAll(); });

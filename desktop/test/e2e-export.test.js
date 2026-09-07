@@ -122,6 +122,17 @@ async function exportAndCheck(spec, expectedTotal, label) {
     assert.ok(meta.width <= 960);
   });
 
+  await ok('media library thumbnail renders as a valid image', async () => {
+    const source = path.join(MEDIA, 'a.mp4');
+    const thumbnail = path.join(OUT, 'a-thumbnail.jpg');
+    await runner.createThumbnail(source, thumbnail, 0.2);
+    assert.ok(fs.existsSync(thumbnail));
+    assert.ok(fs.statSync(thumbnail).size > 100);
+    const meta = await runner.probe(thumbnail);
+    assert.ok(meta.hasVideo);
+    assert.ok(meta.width <= 320);
+  });
+
   await ok('freeze-frame clip is silent and exports on the main timeline', async () => {
     const source = path.join(MEDIA, 'a.mp4');
     const frozenPath = path.join(OUT, 'source-freeze.mp4');

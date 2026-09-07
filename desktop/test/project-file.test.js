@@ -16,6 +16,12 @@ function sampleState() {
       color: { brightness: 0.1, contrast: 1.2, saturation: 1.3, temperature: -20 },
       transitionToNext: { style: 'fade', duration: 0.5 },
     }],
+    mediaAssets: [
+      { id: 41, path: '/media/library.mp4', url: 'file:///media/library.mp4', name: 'library.mp4', kind: 'video', duration: 22, hasAudio: true, width: 1920, height: 1080 },
+      { id: 42, path: '/media/poster.png', name: 'poster.png', kind: 'image', duration: 0, hasAudio: false, width: 1200, height: 800 },
+      { id: 43, path: '/media/voice.mp3', name: 'voice.mp3', kind: 'audio', duration: 8, hasAudio: true, width: 0, height: 0 },
+      { id: 999, path: '/media/library.mp4', name: 'dup.mp4', kind: 'video', duration: 1, hasAudio: false, width: 1, height: 1 },
+    ],
     texts: [{ id: 8, text: '字幕', secondaryText: 'Subtitle', start: 2, end: 3, position: 'bottom', fontSize: 48, fontFamily: 'serif', bold: true, italic: true, opacity: 0.65, xPercent: 25, yPercent: 80, color: '#ffffff', outlineColor: '#000000', outlineWidth: 4, shadow: 2, spacing: 1.5, karaoke: true, karaokeHighlightColor: '#ffd54a', isCaption: true, fade: 0.2 }],
     overlays: [{
       id: 9, path: '/media/logo.png', url: 'file:///media/logo.png', kind: 'image', name: 'logo.png',
@@ -53,6 +59,11 @@ ok('preserves static image main-track clips', () => {
 ok('round-trips all editable state', () => {
   const parsed = project.parseProject(project.serializeProject(sampleState()));
   assert.strictEqual(parsed.state.clips[0].speed, 1.5);
+  assert.deepStrictEqual(parsed.state.mediaAssets, [
+    { id: 41, path: '/media/library.mp4', name: 'library.mp4', kind: 'video', duration: 22, hasAudio: true, width: 1920, height: 1080 },
+    { id: 42, path: '/media/poster.png', name: 'poster.png', kind: 'image', duration: 0, hasAudio: false, width: 1200, height: 800 },
+    { id: 43, path: '/media/voice.mp3', name: 'voice.mp3', kind: 'audio', duration: 8, hasAudio: true, width: 0, height: 0 },
+  ]);
   assert.strictEqual(parsed.state.clips[0].name, 'a.mp4');
   assert.strictEqual(parsed.state.clips[0].muted, true);
   assert.strictEqual(parsed.state.clips[0].volume, 0.6);
@@ -110,9 +121,17 @@ ok('round-trips all editable state', () => {
 ok('clamps unsafe values to supported editor ranges', () => {
   const parsed = project.parseProject(JSON.stringify({
     format: project.FORMAT, version: project.VERSION,
-    state: { clips: [{ path: 'x', sourceDuration: 5, trimStart: -10, trimEnd: 99, speed: 99, color: { saturation: 99 } }], originalVolume: -2, aspect: 'invalid' },
+    state: {
+      clips: [{ path: 'x', sourceDuration: 5, trimStart: -10, trimEnd: 99, speed: 99, color: { saturation: 99 } }],
+      mediaAssets: [{ id: 0, path: ' still.png ', kind: 'bad', duration: 999999999, hasAudio: 'x', width: -5, height: 999999999 }],
+      originalVolume: -2,
+      aspect: 'invalid',
+    },
   }));
   const clip = parsed.state.clips[0];
+  assert.deepStrictEqual(parsed.state.mediaAssets, [
+    { id: 1, path: 'still.png', name: 'still.png', kind: 'image', duration: 24 * 60 * 60, hasAudio: true, width: 0, height: 100000 },
+  ]);
   assert.strictEqual(clip.trimStart, 0);
   assert.strictEqual(clip.trimEnd, 5);
   assert.strictEqual(clip.speed, 4);
@@ -139,6 +158,15 @@ ok('clamps unsafe values to supported editor ranges', () => {
   assert.strictEqual(parsed.state.frameRate, 30);
   assert.strictEqual(parsed.state.snapEnabled, true);
   assert.deepStrictEqual(parsed.state.markers, []);
+});
+
+ok('defaults legacy projects to an empty media library', () => {
+  const parsed = project.parseProject(JSON.stringify({
+    format: project.FORMAT,
+    version: project.VERSION,
+    state: { clips: [{ path: '/media/legacy.mp4', sourceDuration: 3, trimStart: 0, trimEnd: 3 }] },
+  }));
+  assert.deepStrictEqual(parsed.state.mediaAssets, []);
 });
 
 ok('normalizes malformed markers into unique bounded timeline positions', () => {

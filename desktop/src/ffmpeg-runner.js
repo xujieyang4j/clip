@@ -347,6 +347,15 @@ function buildImageProxyArgs(input, output, duration = 3) {
   ];
 }
 
+function buildThumbnailArgs(input, output, seconds = 0.2) {
+  const at = Math.max(0, Number(seconds) || 0);
+  return [
+    '-y', '-ss', String(at), '-i', input, '-frames:v', '1',
+    '-vf', 'scale=320:-2:force_original_aspect_ratio=decrease',
+    '-q:v', '3', output,
+  ];
+}
+
 async function createProxy(input, output) {
   const { ffmpeg } = resolveBinaries();
   input = assertLocalFile(input, '代理源视频');
@@ -363,6 +372,17 @@ async function createImageProxy(input, output, duration) {
   const { error, stderr } = await run(ffmpeg, args, { maxBuffer: 1 << 22 });
   if (error) throw new Error('图片代理生成失败: ' + (stderr || error.message));
   return output;
+}
+
+async function createThumbnail(input, output, seconds) {
+  const { ffmpeg } = resolveBinaries();
+  input = assertLocalFile(input, '缩略图源视频');
+  const resolvedOutput = path.resolve(output);
+  fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
+  const args = buildThumbnailArgs(input, resolvedOutput, seconds);
+  const { error, stderr } = await run(ffmpeg, args, { maxBuffer: 1 << 22 });
+  if (error) throw new Error('缩略图生成失败: ' + (stderr || error.message));
+  return resolvedOutput;
 }
 
 /**
@@ -507,6 +527,8 @@ module.exports = {
   createProxy,
   buildImageProxyArgs,
   createImageProxy,
+  buildThumbnailArgs,
+  createThumbnail,
   createFreezeFrame,
   unpacked,
   fontsDir,

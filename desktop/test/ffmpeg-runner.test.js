@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const runner = require('../src/ffmpeg-runner');
-const { parseProgressTimeSeconds, assertLocalFile, buildWaveform, parseSilenceIntervals, parseSceneCutTimes, findBeatMarkers, buildProxyArgs, buildImageProxyArgs } = runner;
+const { parseProgressTimeSeconds, assertLocalFile, buildWaveform, parseSilenceIntervals, parseSceneCutTimes, findBeatMarkers, buildProxyArgs, buildImageProxyArgs, buildThumbnailArgs } = runner;
 
 let passed = 0;
 const pending = [];
@@ -83,6 +83,14 @@ ok('buildImageProxyArgs loops a still image into a silent editing proxy', () => 
   assert.ok(args.includes('-loop'));
   assert.ok(args.includes('-an'));
   assert.ok(args.includes('4'));
+});
+
+ok('buildThumbnailArgs extracts one scaled frame', () => {
+  const args = buildThumbnailArgs('/tmp/source.mov', '/tmp/thumb.jpg', 0.5);
+  assert.ok(args.includes('0.5'));
+  assert.ok(args.includes('scale=320:-2:force_original_aspect_ratio=decrease'));
+  assert.ok(args.includes('1'));
+  assert.strictEqual(args[args.length - 1], '/tmp/thumb.jpg');
 });
 
 ok('createFreezeFrame generates a silent playable clip from one source frame', async () => {

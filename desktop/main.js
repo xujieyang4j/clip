@@ -13,6 +13,7 @@ const fs = require('fs');
 const os = require('os');
 const { pathToFileURL } = require('url');
 const runner = require('./src/ffmpeg-runner');
+const cache = require('./src/cache-utils');
 const whisper = require('./src/whisper-runner');
 const projects = require('./src/project-store');
 const srt = require('./src/srt-utils');
@@ -25,6 +26,7 @@ let currentExport = null;
 const waveformCache = new Map();
 const analysisCache = new Map();
 const proxyJobs = new Map();
+const thumbnailJobs = new Map();
 
 const UI_LANGUAGES = new Set(['zh-CN', 'en']);
 
@@ -121,6 +123,20 @@ ipcMain.handle('miniclip:pickVideos', async () => {
   return { canceled: false, items: await probeAll(res.filePaths) };
 });
 
+/** Import reusable project media without putting it on the timeline yet. */
+ipcMain.handle('miniclip:pickMedia', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: dialogText('导入项目素材', 'Import project media'),
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: dialogText('媒体', 'Media'), extensions: ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg'] },
+      { name: dialogText('所有文件', 'All files'), extensions: ['*'] },
+    ],
+  });
+  if (res.canceled) return { canceled: true, items: [] };
+  return { canceled: false, items: await probeAll(res.filePaths, { allowAudio: true }) };
+});
+
 ipcMain.handle('miniclip:pickAudio', async (_evt, opts) => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: opts && opts.title ? opts.title : dialogText('选择背景音乐', 'Choose background music'),
@@ -139,7 +155,7 @@ ipcMain.handle('miniclip:pickAudio', async (_evt, opts) => {
       path: p,
       url: pathToFileURL(p).href,
       name: path.basename(p),
-      duration: meta.duration,
+      kind: 'audio', duration: meta.duration, hasAudio: true,
     };
   } catch (e) {
     return { canceled: false, path: p, name: path.basename(p), duration: 0, error: e.message };
@@ -158,7 +174,7 @@ ipcMain.handle('miniclip:saveRecording', async (_evt, payload) => {
     }
     return {
       ok: true, path: savedPath, url: pathToFileURL(savedPath).href,
-      name: path.basename(savedPath), duration: meta.duration,
+      name: path.basename(savedPath), kind: 'audio', duration: meta.duration, hasAudio: true,
     };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -211,8 +227,7 @@ ipcMain.handle('miniclip:createProxy', async (_evt, filePath) => {
     if (!proxyJobs.has(key)) {
       const dir = path.join(app.getPath('userData'), 'proxies');
       fs.mkdirSync(dir, { recursive: true });
-      const safe = Buffer.from(key).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 32);
-      const output = path.join(dir, safe + '.mp4');
+      const output = path.join(dir, cache.cacheFileName(key, '.mp4'));
       const job = fs.existsSync(output) ? Promise.resolve(output) : runner.createProxy(resolved, output);
       proxyJobs.set(key, job);
     }
@@ -233,13 +248,33 @@ ipcMain.handle('miniclip:createImageProxy', async (_evt, payload) => {
     if (!proxyJobs.has(key)) {
       const dir = path.join(app.getPath('userData'), 'proxies');
       fs.mkdirSync(dir, { recursive: true });
-      const safe = Buffer.from(key).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 32);
-      const output = path.join(dir, safe + '.mp4');
+      const output = path.join(dir, cache.cacheFileName(key, '.mp4'));
       const job = fs.existsSync(output) ? Promise.resolve(output) : runner.createImageProxy(resolved, output, duration);
       proxyJobs.set(key, job);
     }
     const proxyPath = await proxyJobs.get(key);
     return { ok: true, path: proxyPath, url: pathToFileURL(proxyPath).href };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('miniclip:createThumbnail', async (_evt, payload) => {
+  try {
+    const filePath = payload && typeof payload === 'object' ? payload.path : payload;
+    const seconds = payload && typeof payload === 'object' ? Math.max(0, Number(payload.seconds) || 0) : 0;
+    const resolved = runner.assertLocalFile(filePath, '缩略图源视频');
+    const stat = fs.statSync(resolved);
+    const key = resolved + ':' + stat.mtimeMs + ':' + stat.size + ':' + seconds;
+    if (!thumbnailJobs.has(key)) {
+      const dir = path.join(app.getPath('userData'), 'thumbnails');
+      fs.mkdirSync(dir, { recursive: true });
+      const output = path.join(dir, cache.cacheFileName(key, '.jpg'));
+      const job = fs.existsSync(output) ? Promise.resolve(output) : runner.createThumbnail(resolved, output, seconds);
+      thumbnailJobs.set(key, job);
+    }
+    const thumbnailPath = await thumbnailJobs.get(key);
+    return { ok: true, path: thumbnailPath, url: pathToFileURL(thumbnailPath).href };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -534,16 +569,24 @@ ipcMain.handle('miniclip:revealFile', async (_evt, filePath) => {
 // helpers
 // ---------------------------------------------------------------------------
 
-async function probeAll(paths) {
+async function probeAll(paths, options) {
   const items = [];
+  const allowAudio = !!(options && options.allowAudio);
   for (const p of paths) {
     try {
       const meta = await runner.probe(p);
-      const image = /\.(png|jpe?g|webp|bmp)$/i.test(p);
+      const image = /\.(png|jpe?g|gif|webp|bmp)$/i.test(p);
       if (image) {
         items.push({
           path: p, url: pathToFileURL(p).href, name: path.basename(p), kind: 'image',
           duration: 3, hasAudio: false, width: meta.width, height: meta.height,
+        });
+        continue;
+      }
+      if (allowAudio && !meta.hasVideo && meta.hasAudio && meta.duration > 0) {
+        items.push({
+          path: p, url: pathToFileURL(p).href, name: path.basename(p), kind: 'audio',
+          duration: meta.duration, hasAudio: true, width: 0, height: 0,
         });
         continue;
       }

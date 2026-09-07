@@ -13,13 +13,38 @@ console.log('project-store:');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'miniclip-project-'));
 const file = path.join(dir, 'edit.miniclip');
-const state = { clips: [], texts: [], overlays: [], bgm: null, originalVolume: 1, bgmVolume: 0.5, aspect: '16:9', fillMode: 'pad' };
+const state = { clips: [], mediaAssets: [], texts: [], overlays: [], bgm: null, originalVolume: 1, bgmVolume: 0.5, aspect: '16:9', fillMode: 'pad' };
 
 ok('writes and reads a .miniclip document', () => {
   assert.strictEqual(store.writeProject(file, state), file);
   const loaded = store.readProject(file);
   assert.strictEqual(loaded.path, file);
   assert.strictEqual(loaded.state.aspect, '16:9');
+  assert.deepStrictEqual(loaded.state.mediaAssets, []);
+});
+
+ok('preserves media library assets and resolves relative asset paths on reopen', () => {
+  const mediaDir = path.join(dir, 'library');
+  fs.mkdirSync(mediaDir);
+  const assetPath = path.join(mediaDir, 'unused.png');
+  fs.writeFileSync(assetPath, 'unused');
+  const saved = path.join(dir, 'library-project.miniclip');
+  store.writeProject(saved, {
+    clips: [],
+    mediaAssets: [{ id: 7, path: assetPath, url: 'file://' + assetPath, name: 'unused.png', kind: 'image', duration: 0, hasAudio: false, width: 640, height: 360 }],
+    texts: [],
+    overlays: [],
+    brolls: [],
+    audioTracks: [],
+    bgm: null,
+  });
+  const raw = JSON.parse(fs.readFileSync(saved, 'utf8'));
+  raw.state.mediaAssets[0].path = path.join('nested', '..', 'library', 'unused.png');
+  fs.writeFileSync(saved, JSON.stringify(raw, null, 2));
+  const reopened = store.readProject(saved);
+  assert.deepStrictEqual(reopened.state.mediaAssets, [
+    { id: 7, path: assetPath, name: 'unused.png', kind: 'image', duration: 0, hasAudio: false, width: 640, height: 360 },
+  ]);
 });
 
 ok('preserves timeline markers in saved projects and recovery files', () => {
@@ -52,26 +77,40 @@ ok('packages referenced media and reopens their relative paths', () => {
   const image = path.join(sources, 'logo.png');
   const audio = path.join(sources, 'voice.wav');
   const music = path.join(sources, 'music.mp3');
-  [video, lut, image, audio, music].forEach((source) => fs.writeFileSync(source, path.basename(source)));
+  const unused = path.join(sources, 'unused.jpg');
+  [video, lut, image, audio, music, unused].forEach((source) => fs.writeFileSync(source, path.basename(source)));
 
   const result = store.packageProject(destination, {
     clips: [{ id: 1, path: video, name: 'clip.mp4', sourceDuration: 5, trimStart: 0, trimEnd: 5, color: { lutPath: lut } }],
+    mediaAssets: [
+      { id: 10, path: video, name: 'clip.mp4', kind: 'video', duration: 5, hasAudio: true, width: 1920, height: 1080 },
+      { id: 11, path: unused, name: 'unused.jpg', kind: 'image', duration: 0, hasAudio: false, width: 800, height: 600 },
+    ],
     texts: [],
     overlays: [{ id: 2, path: image, name: 'logo.png', kind: 'image', start: 0, end: 2 }],
     brolls: [], videoTracks: [], audioTracks: [{ id: 3, path: audio, name: 'voice.wav', start: 0, end: 2 }],
     bgm: { path: music, name: 'music.mp3' },
   }, 'Portable');
 
-  assert.strictEqual(result.mediaCount, 5);
+  assert.strictEqual(result.mediaCount, 6);
   assert.ok(fs.existsSync(result.projectPath));
   assert.strictEqual(fs.readFileSync(path.join(result.root, 'media', 'clip.mp4'), 'utf8'), 'clip.mp4');
+  assert.strictEqual(fs.readFileSync(path.join(result.root, 'media', 'unused.jpg'), 'utf8'), 'unused.jpg');
   const raw = JSON.parse(fs.readFileSync(result.projectPath, 'utf8'));
   assert.strictEqual(raw.state.clips[0].path, path.join('media', 'clip.mp4'));
   assert.strictEqual(raw.state.clips[0].color.lutPath, path.join('media', 'look.cube'));
+  assert.deepStrictEqual(raw.state.mediaAssets, [
+    { id: 10, path: path.join('media', 'clip.mp4'), name: 'clip.mp4', kind: 'video', duration: 5, hasAudio: true, width: 1920, height: 1080 },
+    { id: 11, path: path.join('media', 'unused.jpg'), name: 'unused.jpg', kind: 'image', duration: 0, hasAudio: false, width: 800, height: 600 },
+    { id: 12, path: path.join('media', 'logo.png'), name: 'logo.png', kind: 'image', duration: 2, hasAudio: false, width: 0, height: 0 },
+    { id: 13, path: path.join('media', 'voice.wav'), name: 'voice.wav', kind: 'audio', duration: 0, hasAudio: true, width: 0, height: 0 },
+    { id: 14, path: path.join('media', 'music.mp3'), name: 'music.mp3', kind: 'audio', duration: 0, hasAudio: true, width: 0, height: 0 },
+  ]);
 
   const reopened = store.readProject(result.projectPath);
   assert.strictEqual(reopened.state.clips[0].path, path.join(result.root, 'media', 'clip.mp4'));
   assert.strictEqual(reopened.state.clips[0].color.lutPath, path.join(result.root, 'media', 'look.cube'));
+  assert.strictEqual(reopened.state.mediaAssets[1].path, path.join(result.root, 'media', 'unused.jpg'));
   assert.strictEqual(reopened.state.overlays[0].path, path.join(result.root, 'media', 'logo.png'));
   assert.strictEqual(reopened.state.audioTracks[0].path, path.join(result.root, 'media', 'voice.wav'));
   assert.strictEqual(reopened.state.bgm.path, path.join(result.root, 'media', 'music.mp3'));
@@ -81,7 +120,7 @@ ok('creates a distinct package folder instead of overwriting an existing package
   const source = path.join(dir, 'another.mp4');
   fs.writeFileSync(source, 'another');
   const destination = path.join(dir, 'repeat-deliverables');
-  const state = { clips: [{ id: 1, path: source, sourceDuration: 1, trimStart: 0, trimEnd: 1 }], texts: [], overlays: [], brolls: [], audioTracks: [] };
+  const state = { clips: [{ id: 1, path: source, sourceDuration: 1, trimStart: 0, trimEnd: 1 }], mediaAssets: [], texts: [], overlays: [], brolls: [], audioTracks: [] };
   const first = store.packageProject(destination, state, 'Repeat');
   const second = store.packageProject(destination, state, 'Repeat');
   assert.ok(first.root.endsWith(path.join('repeat-deliverables', 'Repeat')));
