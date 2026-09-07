@@ -486,7 +486,8 @@ final class EditorModel: ObservableObject {
         let bounded = max(0, min(seconds, timelineDuration))
         player.seek(
             to: CMTime(seconds: bounded, preferredTimescale: 600),
-            toleranceBefore: .zero, toleranceAfter: .zero
+            toleranceBefore: .zero, toleranceAfter: .zero,
+            completionHandler: { _ in }
         )
         playheadSeconds = bounded
     }
@@ -1116,7 +1117,7 @@ final class EditorModel: ObservableObject {
         // Keep the playhead within the (possibly shorter) new timeline.
         let total = CMTime(seconds: timelineDuration, preferredTimescale: 600)
         let target = CMTimeMinimum(previousTime, total)
-        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+        await player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
         if wasPlaying { player.play() }
 
         statusMessage = AppLanguage.shared.isEnglish
