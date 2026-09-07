@@ -1,106 +1,79 @@
-# MiniClip — 最小视频剪辑原型
+# MiniClip / Clip 视频编辑器
 
-一个能跑通 **导入 → 时间线裁剪/拼接/排序 → 实时预览 → 导出 mp4** 的最小原型。
+仓库包含两套面向不同终端的实现：
 
-本仓库现在有**两套实现**,功能一致,针对不同平台:
-
-| 目录 | 技术栈 | 跑在哪 | 说明 |
+| 目录 | 技术栈 | 平台 | 定位 |
 |---|---|---|---|
-| **`desktop/`** | Electron + FFmpeg + whisper.cpp | **Windows / macOS / Linux** | 主线桌面编辑器：裁剪、变速/倒放、调色、转场、可编辑字幕和本地自动语音识别、画中画与关键帧曲线动画。见 [`desktop/README.md`](desktop/README.md) 和 [图文使用说明](desktop/使用说明.md) |
-| **`Sources/`** | Swift + AVFoundation | **iOS / macOS** | iPhone 原生;需要 Mac + Xcode。见下文 |
+| `desktop/` | Electron + FFmpeg + whisper.cpp | Windows / macOS / Linux | 功能完整的桌面主线，详见 [`desktop/README.md`](desktop/README.md) |
+| `Sources/` | SwiftUI + AVFoundation | iPhone / iPad | 原生 iOS App，针对触控和移动端媒体工作流设计 |
 
-> 想在桌面(尤其 Windows/Linux)用,走 `desktop/`。要 iPhone 原生 App,走 `Sources/`(Swift)。
-> 桌面版目前功能更完整；Swift 版保留为 iPhone 原生原型，两者不是同一套源码。
+两端共享“素材库 + 非破坏性时间线 + 预览 + 导出”的产品语义，但渲染内核不同：桌面端使用 FFmpeg，iOS 端使用系统 AVFoundation 硬件编解码。
 
----
+## iOS App 当前能力
 
-# Swift / iOS 版(`Sources/`)
+- 从系统相册或“文件”App 批量导入视频。
+- 导入媒体复制到 App 沙盒，避免选择器临时 URL 过期后无法继续编辑。
+- 项目素材库支持同一素材反复加入时间线，并显示使用次数。
+- 时间线片段选择、裁剪、拖动排序、左右移动、分割、复制和删除。
+- 选中片段支持 0.25×–4× 变速和原声静音，预览与最终导出一致。
+- 播放/暂停、播放头拖动和时间码显示。
+- 多片段拼接及 0–2 秒画面/声音交叉叠化。
+- 支持 9:16、16:9、1:1 画布，横竖素材会等比缩放并居中，预览与导出一致。
+- 背景音乐循环、原声与音乐音量控制。
+- 撤销/重做；连续滑块拖动合并为一次撤销。
+- 自动保存并恢复素材库、时间线、裁剪、转场和配乐状态。
+- 可从顶部菜单新建空白项目，操作前会二次确认。
+- AVFoundation 导出 MP4，导出后可分享或直接保存到系统相册。
+- 中文默认，可切换英文。
 
-同一套代码可编译到 **macOS 和 iOS**。
+当前 iOS 版本尚未追平桌面版的字幕、画中画、多视频/音频轨、调色、关键帧、倒放及本地语音识别。这些是后续原生迁移重点。
 
----
+## 架构
 
-## 技术栈说明:为什么是 Swift + Xcode
+- [`EditorModel.swift`](Sources/EditorModel.swift)：编辑状态、素材持久化、播放控制、AVFoundation 合成和导出。
+- [`ContentView.swift`](Sources/ContentView.swift)：适配 iPhone 小屏的预览、工具面板和导出入口。
+- [`TimelineView.swift`](Sources/TimelineView.swift)：片段时间线、裁剪、选择和排序。
+- [`MediaLibraryView.swift`](Sources/MediaLibraryView.swift)：可复用项目素材库。
+- [`ImportedVideo.swift`](Sources/ImportedVideo.swift)：PhotosPicker 的文件流式传输，避免大视频整体读入内存。
+- [`ProjectDocument.swift`](Sources/ProjectDocument.swift)：轻量 JSON 自动保存格式。
+- [`project.yml`](project.yml)：由 XcodeGen 生成 iOS App 与单元测试工程。
+- [`Resources/Assets.xcassets`](Resources/Assets.xcassets)：iOS App 图标资源。
 
-这个 App 目标是**在 iPhone 上原生运行**(顺带也能在 Mac 上跑)。iPhone 原生 App 只能用苹果工具链:**Swift + Xcode**,视频处理用苹果自带的 **AVFoundation**。
-Electron / 网页那类跨平台方案上不了 iPhone(App Store 禁止自带浏览器引擎),所以这里绑定 Swift 是刻意的选择,不是随意为之。
+## 在 Mac 上生成并运行
 
-## 你会用到的 4 个源文件(在 `Sources/` 里)
-
-| 文件 | 作用 |
-|---|---|
-| `MiniClipApp.swift` | App 入口 |
-| `EditorModel.swift` | 核心逻辑:导入、AVFoundation 合成、导出(最重要的一块) |
-| `ContentView.swift` | 主界面:预览播放器 + 顶部按钮 + 状态栏 |
-| `TimelineView.swift` | 时间线:片段卡片、裁剪滑块、排序/删除 |
-
-> ⚠️ 这些 `.swift` 文件**不能直接双击运行**。Xcode 需要一个「工程(project)」来管理它们。
-> 本仓库用 **XcodeGen** 自动生成工程,你不用再手动新建工程、拖文件、点权限——下面第 1-2 步就是这个。
-
----
-
-## 前提
-
-- 一台 **Mac**(编译 iPhone App 必须要 Mac)。
-- 安装了 **Xcode**(App Store 免费下载)。
-
-## 第 1 步:生成 Xcode 工程(一条命令)
-
-本仓库已带好 `project.yml`(工程描述)和 macOS 权限文件,用 [XcodeGen](https://github.com/yonaskolb/XcodeGen) 一键生成工程:
+需要 macOS、Xcode 和 XcodeGen：
 
 ```bash
-brew install xcodegen   # 只需装一次
-cd MiniClip
-xcodegen generate       # 生成 MiniClip.xcodeproj
-open MiniClip.xcodeproj  # 用 Xcode 打开
+brew install xcodegen
+cd clip
+xcodegen generate
+open MiniClip.xcodeproj
 ```
 
-`project.yml` 里已经配好了:双平台(iOS + macOS)、最低系统版本、iOS 相册权限文案、macOS 沙盒「用户选择文件读写」权限。**不用再手动点任何权限设置。**
+然后在 Xcode 中：
 
-> 以后增删 `Sources/` 里的源文件,或改了 `project.yml`,重新跑一次 `xcodegen generate` 即可。
-> 生成出来的 `MiniClip.xcodeproj` 已在 `.gitignore` 里,不入库。
+1. 选择 `MiniClip` target 的 `Signing & Capabilities`，将 Team 改为自己的 Apple ID 团队。
+2. 选择 iPhone 模拟器或已连接的 iPhone。视频导入、导出和相册保存建议最终在真机验证。
+3. 点击 Run。
+4. 可用 `Product > Test` 执行项目文档测试。
 
-## 第 2 步:选签名(装真机才需要)
+`project.yml` 已配置 iOS 16 最低版本、相册读取说明、相册写入说明、启动屏和屏幕方向。修改或增加 Swift 文件后重新运行 `xcodegen generate`。
 
-只在 Mac 上跑的话可跳过。要装到 iPhone:
-- Xcode 里选中项目 → `TARGETS > MiniClip` → **Signing & Capabilities**
-- **Team** 选你的 Apple ID(没有就点 Add an Account 登录,免费账号也行)。
+在装有 Swift 5.10+ 的环境可先运行不依赖 Apple SDK 的检查：
 
-## 第 3 步:运行
+```bash
+./scripts/check-ios.sh
+```
 
-- 顶部选目标:选 **My Mac** 先在 Mac 上跑(最快,不用连手机)。
-- 点左上角 ▶️ 运行。
-- 出现界面后:点 **导入视频** 选一个 mp4/mov → 时间线出现卡片 → 拖滑块裁剪、**拖动卡片**排序(或用箭头)→ 上方预览播放 → 点 **导出**。
-- 想配乐:点 **添加背景音乐** 选一个 mp3/m4a/wav,音乐会自动循环铺满整条时间线;用「原声 / 音乐」两个滑块调音量比例。
-- 想要转场:有 2 段以上时,拖「转场」滑块(0–2 秒),相邻片段间会做交叉溶解(画面+声音同时淡入淡出)。
+它会解析全部 Swift 源码，并执行工程文档往返及转场/分割时间线数学测试。
+仓库的 `iOS Build` GitHub Actions 工作流还会在 macOS runner 上生成 Xcode 工程，并使用可用的 iPhone Simulator 执行真正的 `xcodebuild test`。
 
-想装到 iPhone:顶部目标改成你的手机(需插线 + Apple ID 登录 Xcode),再点 ▶️。
+## 验证边界
 
----
+Linux 环境可以执行 Swift 语法解析和纯 Foundation 工程文档测试，但不能链接 Apple 的 SwiftUI、PhotosUI、AVFoundation，也不能运行 iOS 模拟器。因此最终发布前必须在 Mac/Xcode 上完成：
 
-## 现在能干什么
-
-- ✅ 导入多段视频(可多选)
-- ✅ 每段独立裁剪(起点/止点滑块)
-- ✅ 调整片段顺序(**拖动卡片** 或箭头)、删除片段
-- ✅ 拼接后实时预览播放
-- ✅ 导入一段背景音乐(自动循环铺满整条时间线,可调原声/音乐音量)
-- ✅ 相邻片段交叉溶解转场(0–2 秒可调,画面与声音同步淡变)
-- ✅ 撤销/重做(裁剪、排序、删除、加/删音乐、调音量、转场都能回退)
-- ✅ 导出为单个 mp4,并可通过系统「分享」保存/发送
-
-## 故意没做的(下一步再加)
-
-- 滤镜、特效(需要 Core Image / Metal)
-- 字幕、贴纸
-- 精确到帧的时间线拖拽、吸附
-- 更多转场样式(目前只有交叉溶解)
-
----
-
-## 常见问题
-
-- **`xcodegen: command not found`**:先 `brew install xcodegen`;没有 brew 就去 [XcodeGen 仓库](https://github.com/yonaskolb/XcodeGen) 按说明装。
-- **导入后黑屏没画面**:多半是选的文件不是标准视频编码(权限已由 `project.yml` 自动配好)。先试一个普通手机拍的 mp4。
-- **macOS 报文件读取失败**:确认用的是 `xcodegen generate` 生成的工程——沙盒「用户选择文件读写」权限写在 `Sources/MiniClip-macOS.entitlements` 里,已由 `project.yml` 自动挂上。
-- **导出很慢**:`AVAssetExportPresetHighestQuality` 会重新编码;正常现象,状态栏有进度。
+- iPhone 真机相册导入与保存；
+- 前后台切换、强制退出后的工程恢复；
+- 横竖屏和不同尺寸 iPhone/iPad 的界面检查；
+- 长视频、多素材、低存储空间和导出中断测试；
+- Release Archive、签名与 TestFlight 安装。

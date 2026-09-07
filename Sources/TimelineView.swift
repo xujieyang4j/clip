@@ -12,6 +12,9 @@ struct TimelineView: View {
                 Text(language.text("时间线", "Timeline"))
                     .font(.headline)
                 Spacer()
+                Text(language.isEnglish ? "\(model.clips.count) clips · \(time(model.timelineDuration))" : "\(model.clips.count) 段 · \(time(model.timelineDuration))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 if model.clips.count >= 2 {
                     Text(language.text("拖动卡片可排序", "Drag cards to reorder"))
                         .font(.caption2)
@@ -37,12 +40,16 @@ struct TimelineView: View {
         }
     }
 
+    private func time(_ seconds: Double) -> String {
+        String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60)
+    }
+
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "film.stack")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
-            Text(language.text("还没有片段,点右上角「导入视频」", "No clips yet. Tap Import Video in the top-right corner."))
+            Text(language.text("从素材面板点选素材，将它加入时间线", "Tap media in the Media panel to add it to the timeline"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -70,8 +77,11 @@ struct ClipCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.accentColor, lineWidth: isDropTarget ? 3 : 0)
+                .strokeBorder(Color.accentColor, lineWidth: isDropTarget ? 3 : (model.selectedClipID == clip.id ? 2 : 0))
         )
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture { model.select(clip) }
+        .disabled(model.isBusy)
         // Drag this card out by its id…
         .draggable(clip.id.uuidString) {
             dragPreview

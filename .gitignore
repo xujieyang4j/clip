@@ -1,0 +1,11 @@
+# Generated Xcode project and per-user IDE state
+MiniClip.xcodeproj/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+DerivedData/
+
+# SwiftPM and local build products
+.build/
+
+# macOS Finder metadata
+.DS_Store
