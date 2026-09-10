@@ -22,4 +22,22 @@ struct ImportedVideo: Transferable {
         }
     }
 }
+
+struct ImportedImage: Transferable {
+    let url: URL
+    let name: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .image) { image in
+            SentTransferredFile(image.url)
+        } importing: { received in
+            let ext = received.file.pathExtension.isEmpty ? "jpg" : received.file.pathExtension
+            let copy = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(ext)
+            try FileManager.default.copyItem(at: received.file, to: copy)
+            return ImportedImage(url: copy, name: received.file.lastPathComponent)
+        }
+    }
+}
 #endif

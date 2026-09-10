@@ -13,17 +13,19 @@ struct MediaLibraryView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 10) {
                     ForEach(model.mediaAssets) { asset in
-                        Button { model.addAssetToTimeline(asset) } label: {
+                        Menu {
+                            assetActions(asset)
+                        } label: {
                             HStack(spacing: 8) {
                                 assetImage(asset)
                                     .frame(width: 74, height: 48)
                                     .clipShape(RoundedRectangle(cornerRadius: 7))
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(asset.name).font(.caption).lineLimit(1)
-                                    Text(String(format: "%.1fs · ×%d", asset.duration, model.mediaUsageCount(asset)))
+                                    Text(assetMetadata(asset))
                                         .font(.caption2).foregroundStyle(.secondary)
                                 }
-                                Image(systemName: "plus.circle.fill").foregroundStyle(.tint)
+                                Image(systemName: "ellipsis.circle.fill").foregroundStyle(.tint)
                             }
                             .padding(6)
                             .frame(width: 210, alignment: .leading)
@@ -32,9 +34,7 @@ struct MediaLibraryView: View {
                         .buttonStyle(.plain)
                         .disabled(model.isBusy)
                         .contextMenu {
-                            Button { model.addAssetToTimeline(asset) } label: {
-                                Label(language.text("加入时间线", "Add to Timeline"), systemImage: "plus.rectangle.on.rectangle")
-                            }
+                            assetActions(asset)
                             Button(role: .destructive) { model.removeMediaAsset(asset) } label: {
                                 Label(language.text("移出素材库", "Remove from Library"), systemImage: "trash")
                             }
@@ -55,7 +55,32 @@ struct MediaLibraryView: View {
             Image(nsImage: image).resizable().scaledToFill()
             #endif
         } else {
-            Rectangle().fill(.gray.opacity(0.3)).overlay(Image(systemName: "film"))
+            Rectangle().fill(.gray.opacity(0.3)).overlay(Image(systemName: asset.kind == .audio ? "waveform" : "film"))
         }
+    }
+
+    @ViewBuilder private func assetActions(_ asset: MediaAsset) -> some View {
+        if asset.kind == .audio {
+            Button { model.addAudioAssetToTimeline(asset) } label: {
+                Label(language.text("加入音频轨", "Add to Audio Track"), systemImage: "waveform.badge.plus")
+            }
+        } else {
+            Button { model.addAssetToTimeline(asset) } label: {
+                Label(language.text("追加主轨", "Append to Main Track"), systemImage: "plus.rectangle.on.rectangle")
+            }
+            Button { model.addAssetAsOverlay(asset) } label: {
+                Label(language.text("添加为画中画", "Add as Overlay"), systemImage: "rectangle.on.rectangle")
+            }
+        }
+    }
+
+    private func assetMetadata(_ asset: MediaAsset) -> String {
+        let type: String
+        switch asset.kind {
+        case .video: type = language.text("视频", "Video")
+        case .image: type = language.text("图片", "Image")
+        case .audio: type = language.text("音频", "Audio")
+        }
+        return String(format: "%@ · %.1fs · ×%d", type, asset.duration, model.mediaUsageCount(asset))
     }
 }

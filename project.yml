@@ -41,8 +41,10 @@ targets:
         # —— iOS 权限 / 外观 ——
         # 从「文件」App 导入视频其实走的是文档选择器，不强制要相册权限；
         # 但保留这条文案，方便你以后改用相册选择器（PhotosPicker）时不用再配。
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "需要访问相册来导入视频"
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "需要访问相册来导入视频和图片"
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "需要将导出的成片保存到系统相册"
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "需要使用麦克风录制视频旁白"
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "需要使用系统语音识别将视频原声转换为可编辑字幕"
         # 生成默认启动屏，App 才会以全分辨率运行。
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"

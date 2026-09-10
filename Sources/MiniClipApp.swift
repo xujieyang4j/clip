@@ -5,10 +5,25 @@ import SwiftUI
 struct MiniClipApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppRootView()
         }
         #if os(macOS)
         .defaultSize(width: 720, height: 900)
         #endif
+    }
+}
+
+struct AppRootView: View {
+    @State private var selectedProjectID: UUID?
+
+    var body: some View {
+        Group {
+            if let projectID = selectedProjectID {
+                ContentView(projectID: projectID) { selectedProjectID = nil }
+                    .id(projectID)
+            } else {
+                ProjectLibraryView { selectedProjectID = $0 }
+            }
+        }
     }
 }
