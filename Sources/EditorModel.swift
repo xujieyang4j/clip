@@ -1672,13 +1672,13 @@ final class EditorModel: ObservableObject {
         defer { if scoped { sourceURL.stopAccessingSecurityScopedResource() } }
         do {
             let projectID = self.projectID
-            let localURL = try await Task.detached(priority: .userInitiated) {
+            let localURL: URL = try await Task.detached(priority: .userInitiated) {
                 let attributes = try FileManager.default.attributesOfItem(atPath: sourceURL.path)
                 if let size = attributes[.size] as? NSNumber, size.intValue > CubeLUT.maximumFileSize {
                     throw CubeLUTError.fileTooLarge
                 }
                 _ = try CubeLUT.parse(data: Data(contentsOf: sourceURL))
-                try Self.persistImportedFile(sourceURL, projectID: projectID)
+                return try Self.persistImportedFile(sourceURL, projectID: projectID)
             }.value
             guard let index = clips.firstIndex(where: { $0.id == selectedClipID }) else {
                 try? FileManager.default.removeItem(at: localURL)
